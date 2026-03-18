@@ -2,7 +2,7 @@
 
 A full-stack Loan Management System built using **Spring Boot, Thymeleaf, MySQL**.
 
-## 🚀 Features
+##  Features
 
 * User Loan Application
 * Admin Dashboard
@@ -11,18 +11,18 @@ A full-stack Loan Management System built using **Spring Boot, Thymeleaf, MySQL*
 * Report Generation (PDF & Excel)
 * Email Notifications
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 * Java (Spring Boot)
 * Thymeleaf
 * MySQL
 * HTML, CSS, JS
 
-## 📸 Screenshots
+##  Screenshots
 
 (Add your project screenshots here)
 
-## ⚙️ Installation
+##  Installation
 
 ```bash
 git clone https://github.com/raiyan-nodoliya/loan-management-system.git
@@ -30,11 +30,11 @@ cd loan-management-system
 mvn clean install
 ```
 
-## 🌐 Live Demo
+##  Live Demo
 
 (Add your deployed link here)
 
-## 👨‍💻 Author
+##  Author
 
 Raiyan Nodoliya
 
