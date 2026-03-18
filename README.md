@@ -1,4 +1,4 @@
-# 🏦 Loan Management System (LMS)
+# 🏦 Loan Management System | Spring Boot Project | Java | Thymeleaf | MySQL
 
 A full-stack Loan Management System built using **Spring Boot, Thymeleaf, MySQL**.
 
