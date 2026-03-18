@@ -22,7 +22,7 @@ public class Customer {
     private Long customerId;
 
     @NotBlank(message = "Name is required")
-    @Size(max = 30, message = "Name max 50 characters")
+    @Size(max = 30, message = "Name max 30 characters")
     @Column(nullable = false, length = 30)
     private String name;
 
