@@ -2,8 +2,10 @@ package com.bank.LMS.Controller.customer;
 
 import com.bank.LMS.Entity.Customer;
 import com.bank.LMS.Repository.CustomerRepository;
+import com.bank.LMS.Repository.LoanDocumentRepository;
 import com.bank.LMS.Repository.LoanTypeRepository;
 import com.bank.LMS.Service.customer.LoanApplicationService;
+import com.bank.LMS.Service.config.MailService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -13,6 +15,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Random;
 
 @Controller
 @RequestMapping("/apply")
@@ -21,200 +24,94 @@ public class CustomerLoanApplyController {
     private final LoanApplicationService loanService;
     private final LoanTypeRepository loanTypeRepo;
     private final CustomerRepository customerRepo;
+    private final LoanDocumentRepository docRepo;
+    private final MailService mailService;
 
     public CustomerLoanApplyController(LoanApplicationService loanService,
                                        LoanTypeRepository loanTypeRepo,
-                                       CustomerRepository customerRepo) {
+                                       CustomerRepository customerRepo,
+                                       LoanDocumentRepository docRepo,
+                                       MailService mailService) {
         this.loanService = loanService;
         this.loanTypeRepo = loanTypeRepo;
         this.customerRepo = customerRepo;
+        this.docRepo = docRepo;
+        this.mailService = mailService;
     }
 
-    // ✅ CUSTOMER session based (because your customer login is custom, not Spring Security)
     private Customer getLoggedCustomer(HttpSession session) {
         Long customerId = (Long) session.getAttribute("CUSTOMER_ID");
-        if (customerId == null) return null;
-
-        return customerRepo.findById(customerId).orElse(null);
+        return (customerId == null) ? null : customerRepo.findById(customerId).orElse(null);
     }
 
-    // STEP 1
     @GetMapping("/step1_personal")
     public String step1(HttpSession session, Model model) {
         Customer customer = getLoggedCustomer(session);
         if (customer == null) return "redirect:/customer_login";
-
-        Long appId = (Long) session.getAttribute("loanAppId");
-        var app = loanService.createOrLoadDraft(customer.getCustomerId(), appId);
+        var app = loanService.createOrLoadDraft(customer.getCustomerId(), (Long) session.getAttribute("loanAppId"));
         session.setAttribute("loanAppId", app.getApplicationId());
-
         model.addAttribute("customer", customer);
-
-        // ✅ FIXED
         return "customer/apply/step1_personal";
     }
 
     @PostMapping("/step1_personal")
-    public String step1Save(HttpSession session,
-                            @RequestParam String name,
-                            @RequestParam(required = false) String phone,
-                            @RequestParam(required = false) LocalDate dob,
-                            @RequestParam(required = false) String address) {
-
+    public String step1Save(HttpSession session, @RequestParam String name, @RequestParam(required = false) String phone, @RequestParam(required = false) LocalDate dob, @RequestParam(required = false) String address) {
         Customer customer = getLoggedCustomer(session);
-        if (customer == null) return "redirect:/customer_login";
-
         loanService.updateCustomerPersonal(customer.getCustomerId(), name, phone, dob, address);
         return "redirect:/apply/step2_loan";
     }
 
-    //STEP-2
     @GetMapping("/step2_loan")
     public String step2(HttpSession session, Model model) {
-
-        Customer customer = getLoggedCustomer(session);
-        if (customer == null) return "redirect:/customer_login";
-
-        Long appId = (Long) session.getAttribute("loanAppId");
-        if (appId == null) return "redirect:/apply/step1_personal";
-
-        var list = loanTypeRepo.findByActiveTrueOrderByLoanTypeNameAsc();
-        model.addAttribute("loanTypes", (list == null) ? java.util.List.of() : list);
-
+        if (getLoggedCustomer(session) == null) return "redirect:/customer_login";
+        model.addAttribute("loanTypes", loanTypeRepo.findByActiveTrueOrderByLoanTypeNameAsc());
         return "customer/apply/step2_loan";
     }
 
     @PostMapping("/step2_loan")
     public String step2Save(HttpSession session,
-                            @RequestParam(required = false) Long loanTypeId,
-                            @RequestParam(required = false) BigDecimal amountRequested,
-                            @RequestParam(required = false) Integer tenureMonthsRequested,
-                            @RequestParam(required = false) String purpose,
-                            Model model) {
+                            @RequestParam Long loanTypeId,
+                            @RequestParam BigDecimal amountRequested,
+                            @RequestParam Integer tenureMonthsRequested,
+                            @RequestParam String purpose,
+                            @RequestParam String panNumber) { // Added panNumber
 
         Customer customer = getLoggedCustomer(session);
-        if (customer == null) return "redirect:/customer_login";
-
         Long appId = (Long) session.getAttribute("loanAppId");
-        if (appId == null) return "redirect:/apply/step1_personal";
 
-        boolean hasError = false;
-
-        var list = loanTypeRepo.findByActiveTrueOrderByLoanTypeNameAsc();
-        model.addAttribute("loanTypes", (list == null) ? java.util.List.of() : list);
-
-        model.addAttribute("loanTypeId", loanTypeId);
-        model.addAttribute("amountRequested", amountRequested);
-        model.addAttribute("tenureMonthsRequested", tenureMonthsRequested);
-        model.addAttribute("purpose", purpose);
-
-        if (loanTypeId == null) {
-            model.addAttribute("loanTypeIdError", "Please select loan type");
-            hasError = true;
-        }
-
-        if (amountRequested == null) {
-            model.addAttribute("amountRequestedError", "Loan amount is required");
-            hasError = true;
-        } else if (amountRequested.compareTo(BigDecimal.ONE) < 0) {
-            model.addAttribute("amountRequestedError", "Loan amount must be greater than 0");
-            hasError = true;
-        }
-
-        if (tenureMonthsRequested == null) {
-            model.addAttribute("tenureMonthsRequestedError", "Tenure is required");
-            hasError = true;
-        } else if (tenureMonthsRequested <= 0) {
-            model.addAttribute("tenureMonthsRequestedError", "Tenure must be at least 1 month");
-            hasError = true;
-        }
-
-        if (purpose != null && purpose.length() > 500) {
-            model.addAttribute("purposeError", "Purpose must be under 500 characters");
-            hasError = true;
-        }
-
-        if (hasError) {
-            return "customer/apply/step2_loan";
-        }
-
+        // Save loan details and update PAN in customer profile
         loanService.saveLoanDetails(appId, loanTypeId, amountRequested, tenureMonthsRequested, purpose);
+        loanService.updateCustomerPan(customer.getCustomerId(), panNumber);
+
         return "redirect:/apply/step3_income";
     }
-
-    // STEP 3
     @GetMapping("/step3_income")
     public String step3(HttpSession session) {
-        Customer customer = getLoggedCustomer(session);
-        if (customer == null) return "redirect:/customer_login";
-
-        if (session.getAttribute("loanAppId") == null) return "redirect:/apply/step1_personal";
-
-        // ✅ FIXED
+        if (getLoggedCustomer(session) == null) return "redirect:/customer_login";
         return "customer/apply/step3_income";
     }
 
     @PostMapping("/step3_income")
-    public String step3Save(HttpSession session,
-                            @RequestParam(required = false) String employerName,
-                            @RequestParam(required = false) String designation,
-                            @RequestParam(required = false) BigDecimal monthlyIncome,
-                            @RequestParam(required = false) Integer experienceYears,
-                            Model model) {
-
+    public String step3Save(HttpSession session, @RequestParam String employerName, @RequestParam String designation, @RequestParam BigDecimal monthlyIncome, @RequestParam Integer experienceYears) {
         Customer customer = getLoggedCustomer(session);
-        if (customer == null) return "redirect:/customer_login";
-
         Long appId = (Long) session.getAttribute("loanAppId");
-        if (appId == null) return "redirect:/apply/step1_personal";
-
-        boolean hasError = false;
-
-        model.addAttribute("employerName", employerName);
-        model.addAttribute("designation", designation);
-        model.addAttribute("monthlyIncome", monthlyIncome);
-        model.addAttribute("experienceYears", experienceYears);
-
-        if (monthlyIncome == null) {
-            model.addAttribute("monthlyIncomeError", "Monthly income is required");
-            hasError = true;
-        } else if (monthlyIncome.compareTo(BigDecimal.ZERO) <= 0) {
-            model.addAttribute("monthlyIncomeError", "Monthly income must be greater than 0");
-            hasError = true;
-        }
-
-        if (experienceYears != null && experienceYears < 0) {
-            model.addAttribute("experienceYearsError", "Experience cannot be negative");
-            hasError = true;
-        }
-
-        if (employerName != null && employerName.length() > 100) {
-            model.addAttribute("employerNameError", "Employer name is too long");
-            hasError = true;
-        }
-
-        if (designation != null && designation.length() > 100) {
-            model.addAttribute("designationError", "Designation is too long");
-            hasError = true;
-        }
-
-        if (hasError) {
-            return "customer/apply/step3_income";
-        }
-
         loanService.saveIncomeEmployment(appId, employerName, designation, monthlyIncome, experienceYears);
+
+        String otp = String.valueOf(100000 + new Random().nextInt(900000));
+        session.setAttribute("EMAIL_OTP", otp);
+        try { mailService.sendApplicationVerificationOtp(customer.getEmail(), otp); } catch (Exception e) { e.printStackTrace(); }
+
         return "redirect:/apply/step4_documents";
     }
 
-    // STEP 4
     @GetMapping("/step4_documents")
-    public String step4(HttpSession session) {
+    public String step4(HttpSession session, Model model) {
         Customer customer = getLoggedCustomer(session);
         if (customer == null) return "redirect:/customer_login";
-
-        if (session.getAttribute("loanAppId") == null) return "redirect:/apply/step1_personal";
-
-        // ✅ FIXED
+        String[] docTypes = {"PAN", "AADHAAR", "INCOME_PROOF", "BANK_STATEMENT", "ADDRESS_PROOF"};
+        for (String type : docTypes) {
+            model.addAttribute("has" + type, docRepo.findTopByCustomer_CustomerIdAndDocumentTypeAndIsLatestTrueOrderByUploadedAtDesc(customer.getCustomerId(), type).isPresent());
+        }
         return "customer/apply/step4_documents";
     }
 
@@ -225,66 +122,34 @@ public class CustomerLoanApplyController {
                          @RequestParam(required = false) MultipartFile incomeProofFile,
                          @RequestParam(required = false) MultipartFile bankStmtFile,
                          @RequestParam(required = false) MultipartFile addressProofFile,
-                         RedirectAttributes ra,
-                         Model model) {
+                         @RequestParam String otpInput,
+                         RedirectAttributes ra, Model model) {
 
-        Customer customer = getLoggedCustomer(session);
-        if (customer == null) return "redirect:/customer_login";
+        // OTP Verification
+        if (!otpInput.equals(session.getAttribute("EMAIL_OTP"))) {
+            model.addAttribute("otpError", "Invalid OTP");
+            return step4(session, model);
+        }
 
         Long appId = (Long) session.getAttribute("loanAppId");
-        if (appId == null) return "redirect:/apply/step1_personal";
-
-        boolean hasError = false;
-
-        if (panFile == null || panFile.isEmpty()) {
-            model.addAttribute("panFileError", "PAN file is required");
-            hasError = true;
-        }
-
-        if (aadhaarFile == null || aadhaarFile.isEmpty()) {
-            model.addAttribute("aadhaarFileError", "Aadhaar file is required");
-            hasError = true;
-        }
-
-        if (incomeProofFile == null || incomeProofFile.isEmpty()) {
-            model.addAttribute("incomeProofFileError", "Income proof is required");
-            hasError = true;
-        }
-
-        if (bankStmtFile == null || bankStmtFile.isEmpty()) {
-            model.addAttribute("bankStmtFileError", "Bank statement is required");
-            hasError = true;
-        }
-
-        if (addressProofFile == null || addressProofFile.isEmpty()) {
-            model.addAttribute("addressProofFileError", "Address proof is required");
-            hasError = true;
-        }
-
-        if (hasError) {
-            return "customer/apply/step4_documents";
-        }
-
         try {
-            loanService.uploadDocument(appId, "PAN", panFile);
-            loanService.uploadDocument(appId, "AADHAAR", aadhaarFile);
-            loanService.uploadDocument(appId, "INCOME_PROOF", incomeProofFile);
-            loanService.uploadDocument(appId, "BANK_STATEMENT", bankStmtFile);
-            loanService.uploadDocument(appId, "ADDRESS_PROOF", addressProofFile);
+            // Saare Documents Upload Karo (Agar null nahi hain toh)
+            if (panFile != null && !panFile.isEmpty()) loanService.uploadDocument(appId, "PAN", panFile);
+            if (aadhaarFile != null && !aadhaarFile.isEmpty()) loanService.uploadDocument(appId, "AADHAAR", aadhaarFile);
+            if (incomeProofFile != null && !incomeProofFile.isEmpty()) loanService.uploadDocument(appId, "INCOME_PROOF", incomeProofFile);
+            if (bankStmtFile != null && !bankStmtFile.isEmpty()) loanService.uploadDocument(appId, "BANK_STATEMENT", bankStmtFile);
+            if (addressProofFile != null && !addressProofFile.isEmpty()) loanService.uploadDocument(appId, "ADDRESS_PROOF", addressProofFile);
+
+            // NOTE: calculateCibilScore(appId) yahan se HATA diya hai. Ab ye Officer karega.
 
             loanService.submitApplication(appId);
 
+            ra.addFlashAttribute("toastMessage", "Success! Application submitted for review.");
             session.removeAttribute("loanAppId");
-
-            ra.addFlashAttribute("toastMessage", "Application submitted successfully!");
-            ra.addFlashAttribute("toastType", "success");
             return "redirect:/customer/dashboard";
-
         } catch (Exception e) {
-            model.addAttribute("panFileError", e.getMessage());
+            model.addAttribute("uploadError", e.getMessage());
             return "customer/apply/step4_documents";
         }
     }
-
-
 }

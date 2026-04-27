@@ -3,16 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoanHub - Home</title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>LoanHub - Loan Details</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
     <link rel="stylesheet" th:href="@{/css/loanhub.css}">
     <link rel="stylesheet" th:href="@{/css/customer_dashboard.css}">
 </head>
-
 <body>
 
 <div th:replace="~{fragments/customerNavbarSection :: customerNavbarSection}"></div>
@@ -25,7 +20,6 @@
 </section>
 
 <div class="db-wrap">
-
     <div class="db-stepbar">
         <div class="db-step"><span class="db-step-dot">1</span> Personal Details</div>
         <div class="db-step-line"></div>
@@ -39,26 +33,33 @@
     <div class="db-card db-card-pad" style="max-width: 640px; margin: 12px auto 0;">
         <form th:action="@{/apply/step2_loan}" method="post">
 
+            <div class="db-field" style="margin-bottom: 20px;">
+                <label>PAN Card Number</label>
+                <input class="db-input"
+                       name="panNumber"
+                       type="text"
+                       placeholder="ABCDE1234F"
+                       required
+                       maxlength="10"
+                       pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
+                       style="text-transform: uppercase;"
+                       th:value="${customer != null ? customer.panCard : ''}" />
+                <small style="color: #64748b; font-size: 11px;">10-digit Alphanumeric PAN is mandatory for CIBIL verification.</small>
+            </div>
+
             <div class="db-field">
                 <label>Loan Type</label>
-
-                <select class="db-select" name="loanTypeId" required>
+                <select class="db-select" name="loanTypeId" id="loanTypeSelect" required onchange="updateLoanRules()">
                     <option value="">-- Select --</option>
-
-                    <th:block th:if="${loanTypes != null and !#lists.isEmpty(loanTypes)}"
-                              th:each="x : ${loanTypes}">
+                    <th:block th:each="x : ${loanTypes}">
                         <option th:value="${x.loanTypeId}"
                                 th:text="${x.loanTypeName}"
+                                th:data-tenures="${#strings.arrayJoin(x.tenures.![tenureMonths], ',')}"
+                                th:data-max="${x.maxAmount}"
                                 th:selected="${loanTypeId != null and loanTypeId == x.loanTypeId}">
                         </option>
                     </th:block>
-
-                    <option th:if="${loanTypes == null or #lists.isEmpty(loanTypes)}"
-                            value="" disabled>
-                        No loan types available
-                    </option>
                 </select>
-
                 <small class="db-err" th:if="${loanTypeIdError}" th:text="${loanTypeIdError}"></small>
             </div>
 
@@ -66,23 +67,27 @@
                 <div class="db-field">
                     <label>Loan Amount (₹)</label>
                     <input class="db-input"
+                           id="amountInput"
                            name="amountRequested"
                            type="number"
-                           step="0.01"
-                           min="1"
+                           step="500"
                            placeholder="Enter loan amount"
-                           th:value="${amountRequested}" />
-                    <small class="db-err" th:if="${amountRequestedError}" th:text="${amountRequestedError}"></small>
+                           th:value="${amountRequested}"
+                           th:classappend="${amountRequestedError != null} ? 'input-error' : ''" />
+
+                    <small id="amountHint" style="color: #64748b; font-size: 11px; font-weight: 500; display: block; margin-top: 4px;">
+                        <span th:if="${amountRequestedError == null}">Please select loan type to see limit</span>
+                    </small>
+
+                    <small class="db-err" id="serverError" th:if="${amountRequestedError}"
+                           th:text="${amountRequestedError}" style="color: #dc2626;"></small>
                 </div>
 
                 <div class="db-field">
-                    <label>Tenure (months)</label>
-                    <input class="db-input"
-                           name="tenureMonthsRequested"
-                           type="number"
-                           min="1"
-                           placeholder="Enter tenure in months"
-                           th:value="${tenureMonthsRequested}" />
+                    <label>Select Tenure (Months)</label>
+                    <select class="db-select" name="tenureMonthsRequested" id="tenureSelect" required>
+                        <option value="">-- Select Loan Type First --</option>
+                    </select>
                     <small class="db-err" th:if="${tenureMonthsRequestedError}" th:text="${tenureMonthsRequestedError}"></small>
                 </div>
             </div>
@@ -108,9 +113,69 @@
     </div>
 </div>
 
- <div th:replace="~{fragments/footer :: footerSection}"></div>
+<div th:replace="~{fragments/footer :: footerSection}"></div>
 
 <script th:src="@{/js/loanhub.js}"></script>
-<script th:src="@{/js/customer_dashboard.js}"></script>
+
+<script>
+    function updateLoanRules() {
+    const loanSelect = document.getElementById('loanTypeSelect');
+    const tenureSelect = document.getElementById('tenureSelect');
+    const amountInput = document.getElementById('amountInput');
+    const hint = document.getElementById('amountHint');
+    const serverErr = document.getElementById('serverError');
+
+    const selectedOption = loanSelect.options[loanSelect.selectedIndex];
+
+    // Reset basics
+    if (serverErr) serverErr.style.display = 'none'; // Purana server error chhupa do
+    hint.style.color = "#64748b";
+
+    if (!selectedOption.value) {
+        hint.innerText = "Please select loan type to see limit";
+        return;
+    }
+
+    // 1. Update Tenure (Same as before)
+    const tenuresStr = selectedOption.getAttribute('data-tenures');
+    tenureSelect.innerHTML = '<option value="">-- Select Tenure --</option>';
+    if (tenuresStr) {
+        tenuresStr.split(',').forEach(m => {
+            let opt = document.createElement('option');
+            opt.value = m.trim();
+            opt.text = m.trim() + " Months";
+            tenureSelect.appendChild(opt);
+        });
+    }
+
+    // 2. Update Placeholder & Hint dynamically
+    const maxAmt = selectedOption.getAttribute('data-max');
+    if (maxAmt) {
+        const formattedMax = parseFloat(maxAmt).toLocaleString('en-IN');
+        amountInput.setAttribute('max', maxAmt);
+        amountInput.placeholder = "Max allowed: ₹" + formattedMax;
+        hint.innerText = "Note: For this loan, max amount is ₹" + formattedMax + " only.";
+    }
+}
+
+// Real-time validation without Alert
+document.getElementById('amountInput').addEventListener('input', function() {
+    const loanSelect = document.getElementById('loanTypeSelect');
+    const selectedOption = loanSelect.options[loanSelect.selectedIndex];
+    const max = parseFloat(selectedOption.getAttribute('data-max'));
+    const currentVal = parseFloat(this.value);
+    const hint = document.getElementById('amountHint');
+
+    if (max && currentVal > max) {
+        hint.innerText = "Error: Max amount is ₹" + max.toLocaleString('en-IN') + " only (Admin Limit).";
+        hint.style.color = "#dc2626"; // Red color for error
+        this.style.border = "1px solid #dc2626";
+    } else if (max) {
+        hint.innerText = "Note: Max amount is ₹" + max.toLocaleString('en-IN') + " only.";
+        hint.style.color = "#64748b"; // Back to normal
+        this.style.border = "";
+    }
+});
+</script>
 </body>
 </html>

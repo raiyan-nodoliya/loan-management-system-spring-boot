@@ -109,6 +109,9 @@ public class LoanApplication {
     @Column(name = "monthly_income", precision = 12, scale = 2)
     private BigDecimal monthlyIncome;
 
+    @Column(name = "cibil_score")
+    private Integer cibilScore;
+
     @Column(name = "existing_emis", precision = 12, scale = 2)
     private BigDecimal existingEmis;
 

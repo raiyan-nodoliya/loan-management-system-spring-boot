@@ -361,3 +361,102 @@ if (window.location.search.includes("logout=1")) {
     if (toast) toast.style.display = "none";
   }, 3000);
 })();
+
+
+
+// ==========================================
+// 🚀 CUSTOMER REGISTRATION STRICT VALIDATION
+// ==========================================
+(function () {
+    const regForm = document.querySelector('form[action*="register"]');
+    if (!regForm) return;
+
+    const phoneInp = regForm.querySelector('input[name="phone"]');
+    const pinInp = regForm.querySelector('input[name="pincode"]');
+    const passInp = regForm.querySelector('input[name="password"]');
+    const confInp = regForm.querySelector('input[name="confirmPassword"]');
+
+    // 1. Phone: Sirf 10 digit allow karo
+    if (phoneInp) {
+        phoneInp.addEventListener('input', function(e) {
+            this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10);
+        });
+    }
+
+    // 2. Pincode: Sirf 6 digit (Indian Standard)
+    if (pinInp) {
+        pinInp.addEventListener('input', function(e) {
+            this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
+        });
+    }
+
+    // 3. Final Submit Validation
+    regForm.addEventListener('submit', function (e) {
+        let hasError = false;
+        let errorMsg = "";
+
+        if (phoneInp.value.length !== 10) {
+            errorMsg = "Mobile number must be exactly 10 digits.";
+            hasError = true;
+        } else if (pinInp.value.length !== 6) {
+            errorMsg = "Pincode must be exactly 6 digits.";
+            hasError = true;
+        } else if (passInp.value !== confInp.value) {
+            errorMsg = "Passwords do not match!";
+            hasError = true;
+        }
+
+        if (hasError) {
+            e.preventDefault();
+            // Agar aapka showToast function globally available hai
+            if (typeof showToast === "function") {
+                showToast(errorMsg, "error");
+            } else {
+                alert(errorMsg);
+            }
+        }
+    });
+})();
+
+// ==========================================
+// 🧹 TOAST CLEANUP & LOGIC FIX
+// ==========================================
+// (Aapne niche do baar toast ka code likha hai,
+// niche wale block ko hata kar sirf ek clean logic rakho)
+(function () {
+    const dataEl = document.getElementById("toastData");
+    if (!dataEl) return;
+
+    const msg = dataEl.dataset.msg || dataEl.getAttribute("data-msg");
+    const type = (dataEl.dataset.type || dataEl.getAttribute("data-type") || "info").toLowerCase();
+
+    if (!msg || msg.trim() === "") return;
+
+    const toast = document.getElementById("toast");
+    const text = document.getElementById("toastText");
+    const icon = document.getElementById("toastIcon");
+    const bar  = document.getElementById("toastBar");
+
+    if (!toast || !text) return;
+
+    // Setup Appearance
+    let bg = "#ef4444"; // error
+    let symbol = "!";
+    if (type === "success") { bg = "#16a34a"; symbol = "✓"; }
+    if (type === "info")    { bg = "#2563eb"; symbol = "i"; }
+
+    text.textContent = msg;
+    if(icon) {
+        icon.style.background = bg;
+        icon.textContent = symbol;
+    }
+    if(bar) bar.style.background = bg;
+
+    // Show
+    toast.style.display = "block";
+
+    // Auto-hide after 3.5 seconds
+    setTimeout(() => {
+        toast.style.display = "none";
+    }, 3500);
+})();

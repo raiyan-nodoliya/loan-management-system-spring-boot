@@ -29,6 +29,7 @@
 
         <div class="db-alert db-alert-warn" th:if="${app.needsInfoMessage != null}">
             <i class="fa-solid fa-circle-info"></i>
+            <strong>Required: </strong>
             <span th:text="${app.needsInfoMessage}">Message</span>
         </div>
 
@@ -38,11 +39,22 @@
             <div class="db-field">
                 <label class="db-label">Document Type</label>
                 <select class="db-select" name="documentType" required>
-                    <option value="" disabled selected>Select document type</option>
-                    <option value="INCOME_PROOF">Income Proof</option>
-                    <option value="AADHAAR">Aadhaar</option>
-                    <option value="PAN">PAN</option>
+                    <th:block th:if="${app.needsInfoMessage != null}">
+                        <option th:value="${app.needsInfoMessage}"
+                                th:text="${app.needsInfoMessage}"
+                                selected></option>
+                    </th:block>
+
+                    <th:block th:if="${app.needsInfoMessage == null}">
+                        <option value="" disabled selected>Select document type</option>
+                        <option value="INCOME_PROOF">Income Proof</option>
+                        <option value="IDENTITY_PROOF">Identity Proof</option>
+                        <option value="ADDRESS_PROOF">Address Proof</option>
+                    </th:block>
                 </select>
+                <p class="db-help-text" style="font-size: 0.85rem; color: #666; margin-top: 5px;">
+                    * Make sure the document matches the requested type.
+                </p>
             </div>
 
             <div class="db-field">
@@ -65,13 +77,16 @@
         <div class="db-card db-pad" style="margin-top:16px;" th:if="${documents != null and !#lists.isEmpty(documents)}">
             <h3 class="db-sec-title">Latest Uploaded Documents</h3>
 
-            <div th:each="d : ${documents}" style="display:flex;justify-content:space-between;align-items:center;margin:12px 0;">
-                <span th:text="${d.documentType + ' (v' + d.versionNo + ')'}">PAN</span>
+            <div th:each="d : ${documents}" style="display:flex;justify-content:space-between;align-items:center;margin:12px 0; padding: 10px; border-bottom: 1px solid #eee;">
+                <div>
+                    <i class="fa-solid fa-file-lines" style="color: var(--st-navy);"></i>
+                    <span th:text="${d.documentType + ' (v' + d.versionNo + ')'}" style="font-weight: 500; margin-left: 8px;">Type</span>
+                </div>
 
                 <a class="db-btn"
                    th:href="@{'/files/' + ${d.filePath}}"
                    target="_blank">
-                    View
+                    <i class="fa-solid fa-eye"></i> View
                 </a>
             </div>
         </div>

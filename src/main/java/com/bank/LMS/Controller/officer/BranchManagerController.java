@@ -4,10 +4,13 @@ import com.bank.LMS.Entity.LoanAccount;
 import com.bank.LMS.Entity.LoanApplication;
 import com.bank.LMS.Entity.RiskAssessment;
 import com.bank.LMS.Entity.StaffUsers;
+import com.bank.LMS.Entity.ApplicationMessage; // Added
+import com.bank.LMS.Repository.ApplicationMessageRepository; // Added
 import com.bank.LMS.Repository.StaffUsersRepository;
 import com.bank.LMS.Service.officer.BranchManagerService;
 import com.bank.LMS.Service.officer.StaffPermissionService;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Autowired; // Added
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +18,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.math.BigDecimal;
 import java.security.Principal;
+import java.util.List; // Added
 
 @Controller
 @RequestMapping("/manager")
@@ -23,6 +27,9 @@ public class BranchManagerController {
     private final BranchManagerService branchManagerService;
     private final StaffUsersRepository staffUsersRepository;
     private final StaffPermissionService staffPermissionService;
+
+    @Autowired // Repository inject ki gayi hai
+    private ApplicationMessageRepository messageRepo;
 
     public BranchManagerController(BranchManagerService branchManagerService,
                                    StaffUsersRepository staffUsersRepository,
@@ -74,6 +81,11 @@ public class BranchManagerController {
             ra.addFlashAttribute("toastType", "error");
             return "redirect:/manager/dashboard";
         }
+
+        // --- Message Fetching Logic ---
+        List<ApplicationMessage> messages = messageRepo.findByApplicationIdOrderByCreatedAtAsc(id);
+        model.addAttribute("messages", messages);
+        // ------------------------------
 
         String username = principal.getName();
         StaffUsers user = staffUsersRepository.findByEmail(username).orElse(null);

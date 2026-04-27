@@ -69,3 +69,20 @@
     });
   }
 })();
+
+
+// ===== Toast Notification Logic =====
+(function() {
+    // Thymeleaf se aane wale attributes ko check karo (agar hidden inputs ya global variable mein ho)
+    // Lekin sabse best tarika hai DOM se trigger karna
+    const toast = document.getElementById("toast");
+    if (toast) {
+        // Show toast
+        toast.classList.add("show");
+
+        // 4 seconds baad automatic hide kar do
+        setTimeout(() => {
+            toast.classList.remove("show");
+        }, 4000);
+    }
+})();

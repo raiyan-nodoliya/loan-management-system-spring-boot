@@ -232,10 +232,7 @@ public class publicController {
         java.util.List<LoanDocument> documents;
 
         if (app.getNeedsInfoAt() != null) {
-            documents = docRepo
-                    .findByApplication_ApplicationIdAndCustomer_CustomerIdAndIsLatestTrueAndUploadedAtGreaterThanEqualOrderByDocumentTypeAsc(
-                            id, customerId, app.getNeedsInfoAt()
-                    );
+            documents = docRepo.findRecentDocs(id, customerId, app.getNeedsInfoAt());
         } else {
             documents = java.util.List.of();
         }

@@ -3,10 +3,14 @@ package com.bank.LMS.Controller.officer;
 import com.bank.LMS.Entity.LoanApplication;
 import com.bank.LMS.Entity.RiskAssessment;
 import com.bank.LMS.Entity.StaffUsers;
+import com.bank.LMS.Entity.ApplicationMessage;
+import com.bank.LMS.Repository.ApplicationMessageRepository;
 import com.bank.LMS.Repository.StaffUsersRepository;
+import com.bank.LMS.Repository.EmiScheduleRepository; // Naya Repository
 import com.bank.LMS.Service.officer.RiskOfficerService;
 import com.bank.LMS.Service.officer.StaffPermissionService;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +18,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.math.BigDecimal;
 import java.security.Principal;
+import java.util.List;
 
 @Controller
 @RequestMapping("/risk")
@@ -22,6 +27,12 @@ public class RiskOfficerDashboardController {
     private final RiskOfficerService riskOfficerService;
     private final StaffUsersRepository staffUsersRepository;
     private final StaffPermissionService staffPermissionService;
+
+    @Autowired
+    private ApplicationMessageRepository messageRepo;
+
+    @Autowired
+    private EmiScheduleRepository emiScheduleRepo; // EMI fetch karne ke liye
 
     public RiskOfficerDashboardController(RiskOfficerService riskOfficerService,
                                           StaffUsersRepository staffUsersRepository,
@@ -33,22 +44,11 @@ public class RiskOfficerDashboardController {
 
     @GetMapping("/dashboard")
     public String dashboard(Model model, Principal principal, HttpSession session) {
-
         if (principal != null) {
             String username = principal.getName();
             StaffUsers user = staffUsersRepository.findByEmail(username).orElse(null);
             model.addAttribute("loggedInName", user != null ? user.getName() : username);
             model.addAttribute("canViewReports", staffPermissionService.canViewReports(username));
-        }
-
-        Object toastMsg = session.getAttribute("toastMessage");
-        Object toastType = session.getAttribute("toastType");
-
-        if (toastMsg != null) {
-            model.addAttribute("toastMessage", toastMsg);
-            model.addAttribute("toastType", toastType);
-            session.removeAttribute("toastMessage");
-            session.removeAttribute("toastType");
         }
 
         model.addAttribute("pendingEvaluation", riskOfficerService.pendingEvaluationCount());
@@ -60,10 +60,7 @@ public class RiskOfficerDashboardController {
     }
 
     @GetMapping("/evaluate/{id}")
-    public String evaluatePage(@PathVariable Long id,
-                               Model model,
-                               RedirectAttributes ra,
-                               Principal principal) {
+    public String evaluatePage(@PathVariable Long id, Model model, RedirectAttributes ra, Principal principal) {
 
         LoanApplication app = riskOfficerService.getApplication(id);
         if (app == null) {
@@ -72,21 +69,34 @@ public class RiskOfficerDashboardController {
             return "redirect:/risk/dashboard";
         }
 
+        // 1. Pehle se chal rahi messages fetch karo
+        model.addAttribute("messages", messageRepo.findByApplicationIdOrderByCreatedAtAsc(id));
+
+        // 2. Logged in user info
         if (principal != null) {
-            String username = principal.getName();
-            StaffUsers user = staffUsersRepository.findByEmail(username).orElse(null);
-            model.addAttribute("loggedInName", user != null ? user.getName() : username);
+            StaffUsers user = staffUsersRepository.findByEmail(principal.getName()).orElse(null);
+            model.addAttribute("loggedInName", user != null ? user.getName() : principal.getName());
         }
 
-        RiskAssessment existingAssessment = riskOfficerService.getExistingAssessment(id);
+        // 3. FEATURE: Existing EMI calculation from EmiSchedule table
+        // Hum system se check kar rahe hain ki is customer ki kitni EMI baki hain
+        BigDecimal systemPendingEmis = emiScheduleRepo.sumPendingEmisByCustomerId(app.getCustomer().getCustomerId());
+        if (systemPendingEmis == null) systemPendingEmis = BigDecimal.ZERO;
 
-        BigDecimal monthlyIncome = app.getMonthlyIncome() != null ? app.getMonthlyIncome() : BigDecimal.ZERO;
-        BigDecimal existingEmis = app.getExistingEmis() != null ? app.getExistingEmis() : BigDecimal.ZERO;
-        BigDecimal foir = riskOfficerService.calculateFoir(monthlyIncome, existingEmis);
+        // Agar application form mein pehle se koi EMI likhi hai, toh dono mein se jo zyada ho wo le sakte hain
+        // Ya fir sirf system wala dikhao. Yaha hum dono ka logic handle kar rahe hain:
+        BigDecimal finalExistingEmis = (app.getExistingEmis() != null && app.getExistingEmis().compareTo(BigDecimal.ZERO) > 0)
+                ? app.getExistingEmis() : systemPendingEmis;
+
+        BigDecimal monthlyIncome = (app.getMonthlyIncome() != null) ? app.getMonthlyIncome() : BigDecimal.ZERO;
+
+        // Initial FOIR (DTI) Count
+        BigDecimal foir = riskOfficerService.calculateFoir(monthlyIncome, finalExistingEmis);
 
         model.addAttribute("app", app);
-        model.addAttribute("existingAssessment", existingAssessment);
+        model.addAttribute("existingAssessment", riskOfficerService.getExistingAssessment(id));
         model.addAttribute("foir", foir);
+        model.addAttribute("defaultEmis", finalExistingEmis); // Textbox ke liye
 
         return "risk/evaluate_application";
     }
@@ -101,8 +111,7 @@ public class RiskOfficerDashboardController {
 
         boolean ok = riskOfficerService.submitEvaluation(id, monthlyIncome, existingEmis, recommendation, notes);
 
-        ra.addFlashAttribute("toastMessage",
-                ok ? "Risk evaluation submitted successfully" : "Failed to submit risk evaluation");
+        ra.addFlashAttribute("toastMessage", ok ? "Evaluation submitted" : "Failed to submit");
         ra.addFlashAttribute("toastType", ok ? "success" : "error");
 
         return ok ? "redirect:/risk/dashboard" : "redirect:/risk/evaluate/" + id;

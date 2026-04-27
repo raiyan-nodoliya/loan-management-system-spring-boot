@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoanHub - Manager Decision</title>
-
     <link rel="stylesheet" th:href="@{/css/loanhub.css}">
     <link rel="stylesheet" th:href="@{/css/staff_dashboard.css}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
@@ -15,149 +14,125 @@
 
 <section class="st-hero">
     <div class="st-hero-inner">
-        <h1 class="st-hero-title">
-            Decision:
-            <span th:text="${app.applicationNo}">LH-2024-0006</span>
-        </h1>
-        <p class="st-hero-sub">
-            <span th:text="${app.customer.name}">Meera Joshi</span>
-            —
-            <span th:text="${app.loanType != null ? app.loanType.loanTypeName : 'Loan'}">Home Loan</span>
-        </p>
+        <h1 class="st-hero-title">Decision: <span th:text="${app != null ? app.applicationNo : 'N/A'}">LH-2024-0001</span></h1>
+        <p class="st-hero-sub" th:if="${app != null}" th:text="${app.customer.name} + ' — ' + (${app.loanType != null ? app.loanType.loanTypeName : 'Loan'})"></p>
     </div>
 </section>
 
-<main class="st-wrap">
+<main class="st-wrap" th:if="${app != null}">
     <div class="st-grid-2-eq">
-
         <div>
             <div class="st-card st-pad">
-                <h3 class="st-sec-title">Officer Notes</h3>
-                <div class="st-note-box st-mt-12"
-                     th:text="${app.officerNotes != null && !#strings.isEmpty(app.officerNotes) ? app.officerNotes : 'No officer notes available'}">
-                    No officer notes available
-                </div>
-            </div>
+                <h3 class="st-sec-title"><i class="fa-solid fa-clock-rotate-left"></i> Review History</h3>
 
-            <div class="st-card st-pad st-mt-16">
-                <h3 class="st-sec-title">Risk Evaluation Summary</h3>
+                <div class="st-label st-mt-12">Officer Notes</div>
+                <div class="st-note-box" th:text="${app.officerNotes != null && !#strings.isEmpty(app.officerNotes) ? app.officerNotes : 'No notes provided by officer.'}"></div>
 
-                <div class="st-info-grid" style="margin-top:10px;">
-                    <div class="st-info-item">
-                        <span class="st-info-key">Risk Score:</span>
-                        <span th:text="${riskAssessment != null ? riskAssessment.riskScore : '-'}">82</span>
-                    </div>
-
-                    <div class="st-info-item">
-                        <span class="st-info-key">Recommendation:</span>
-                        <span th:text="${riskAssessment != null && riskAssessment.recommendationStatus != null ? riskAssessment.recommendationStatus.label : '-'}">Approve</span>
+                <div class="st-label st-mt-16">Credit & Risk Assessment</div>
+                <div class="st-note-box" style="background: #f0f9ff; border: 1px dashed #0369a1; margin-bottom: 10px;">
+                    <div style="display:flex; justify-content: space-between; align-items: center;">
+                        <span><i class="fa-solid fa-id-card"></i> <strong>CIBIL Score:</strong></span>
+                        <span class="st-pill"
+                              th:classappend="${app.cibilScore != null && app.cibilScore >= 750 ? 'st-pill-approved' : 'st-pill-recommended'}"
+                              th:text="${app.cibilScore != null ? app.cibilScore : 'Fetching...'}"></span>
                     </div>
                 </div>
 
-                <div class="st-note-box st-mt-12"
-                     th:text="${riskAssessment != null && riskAssessment.remarks != null && !#strings.isEmpty(riskAssessment.remarks) ? riskAssessment.remarks : 'No risk remarks available'}">
-                    No risk remarks available
-                </div>
-            </div>
-
-            <div class="st-card st-pad st-mt-16">
-                <h3 class="st-sec-title">Manager Notes</h3>
-                <div class="st-note-box st-mt-12"
-                     th:text="${app.managerNotes != null && !#strings.isEmpty(app.managerNotes) ? app.managerNotes : 'No manager notes available'}">
-                    No manager notes available
-                </div>
-            </div>
-
-            <div class="st-card st-pad st-mt-16">
-                <div class="st-status-line">
-                    <span class="st-info-key">Current Status:</span>
+                <div class="st-note-box" style="display:flex; justify-content: space-between; align-items: center;">
+                    <span><i class="fa-solid fa-gauge-high"></i> System Risk Score: <strong th:text="${riskAssessment != null ? riskAssessment.riskScore : 'N/A'}"></strong></span>
                     <span class="st-pill"
-                          th:classappend="${app.status.statusCode == 'RECOMMENDED'} ? ' st-pill-recommended' :
-                                          (${app.status.statusCode == 'APPROVED'} ? ' st-pill-approved' :
-                                          (${app.status.statusCode == 'DISBURSED'} ? ' st-pill-disbursed' : ' st-pill-rejected'))"
-                          th:text="${app.status.label}">
-                        Recommended
-                    </span>
+                          th:classappend="${riskAssessment != null && #strings.toString(riskAssessment.recommendationStatus) == 'APPROVE' ? 'st-pill-approved' : 'st-pill-rejected'}"
+                          th:text="${riskAssessment != null && riskAssessment.recommendationStatus != null ? riskAssessment.recommendationStatus.label : 'Pending'}">Pending</span>
                 </div>
+            </div>
 
-                <div th:if="${existingAccount != null}" class="st-note-box st-mt-12">
-                    <div><strong>Loan Account No:</strong> <span th:text="${existingAccount.accountNo}">LN-000001-123456</span></div>
-                    <div class="st-mt-8">
-                        <strong>Sanction Amount:</strong>
-                        <span th:text="'₹' + ${#numbers.formatDecimal(existingAccount.sanctionAmount, 0, 'COMMA', 0, 'POINT')}">₹45,00,000</span>
-                    </div>
-                    <div class="st-mt-8">
-                        <strong>Status:</strong>
-                        <span th:text="${existingAccount.status}">ACTIVE</span>
-                    </div>
+            <div class="st-card st-pad st-mt-16">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span class="st-info-key">Current Application Status:</span>
+                    <span class="st-pill st-pill-recommended" th:text="${app.status != null ? app.status.label : 'N/A'}">Recommended</span>
                 </div>
             </div>
         </div>
 
         <div class="st-card st-pad">
-            <h3 class="st-sec-title">Sanction Terms</h3>
-
+            <h3 class="st-sec-title"><i class="fa-solid fa-file-signature"></i> Final Sanction Terms</h3>
             <form method="post">
-                <label class="st-label">Offer / Sanction Amount (₹)</label>
-                <input class="st-input"
-                       type="number"
-                       name="sanctionAmount"
-                       step="0.01"
-                       th:value="${app.offeredAmount != null ? app.offeredAmount : (existingAccount != null ? existingAccount.sanctionAmount : app.amountRequested)}"
-                       required>
+                <label class="st-label">Sanction Amount (₹)</label>
+                <input class="st-input" type="number" name="sanctionAmount" th:value="${app.offeredAmount ?: app.amountRequested}" required>
 
-                <label class="st-label">Interest Rate (% p.a.)</label>
-                <input class="st-input"
-                       type="number"
-                       name="interestRateAnnual"
-                       step="0.01"
-                       th:value="${app.offeredInterestRateAnnual != null ? app.offeredInterestRateAnnual : (existingAccount != null ? existingAccount.interestRateAnnual : 10.5)}"
-                       required>
+                <div class="st-form-2 st-mt-12">
+                    <div>
+                        <label class="st-label">Rate (% p.a.)</label>
+                        <input class="st-input" type="number" step="0.01" name="interestRateAnnual" th:value="${app.offeredInterestRateAnnual ?: 10.5}" required>
+                    </div>
+                    <div>
+                        <label class="st-label">Tenure (Months)</label>
+                        <input class="st-input" type="number" name="tenureMonths" th:value="${app.offeredTenureMonths ?: app.tenureMonthsRequested}" required>
+                    </div>
+                </div>
 
-                <label class="st-label">Tenure (months)</label>
-                <input class="st-input"
-                       type="number"
-                       name="tenureMonths"
-                       th:value="${app.offeredTenureMonths != null ? app.offeredTenureMonths : (existingAccount != null ? existingAccount.tenureMonths : app.tenureMonthsRequested)}"
-                       required>
-
-                <label class="st-label">Manager Notes</label>
-                <textarea class="st-textarea"
-                          name="managerNotes"
-                          placeholder="Manager decision notes..."
-                          th:text="${app.managerNotes}"></textarea>
+                <label class="st-label">Manager Decision Notes</label>
+                <textarea class="st-textarea" name="managerNotes" placeholder="Explain the reason for approval/rejection..." th:text="${app.managerNotes}"></textarea>
 
                 <div class="st-mt-16">
-                    <button class="st-btn st-btn-yellow st-btn-block"
-                            type="submit"
-                            th:formaction="@{/manager/decision/{id}/approve(id=${app.applicationId})}">
-                        ✓ Approve Loan
+                    <button class="st-btn st-btn-yellow st-btn-block" type="submit" th:formaction="@{/manager/decision/{id}/approve(id=${app.applicationId})}">
+                        <i class="fa-solid fa-check-circle"></i> Approve Loan
                     </button>
-                </div>
-
-                <div class="st-mt-12">
-                    <button class="st-btn st-btn-navy st-btn-block"
-                            type="submit"
-                            th:formaction="@{/manager/decision/{id}/send-offer(id=${app.applicationId})}">
-                        Send Offer To Customer
+                    <button class="st-btn st-btn-navy st-btn-block st-mt-12" type="submit" th:formaction="@{/manager/decision/{id}/send-offer(id=${app.applicationId})}">
+                        <i class="fa-solid fa-paper-plane"></i> Send Offer to Customer
                     </button>
-                </div>
-
-                <div class="st-mt-12">
-                    <button class="st-btn st-btn-red st-btn-block"
-                            type="submit"
-                            th:formaction="@{/manager/decision/{id}/reject(id=${app.applicationId})}">
-                        ✗ Reject Loan
+                    <button class="st-btn st-btn-red st-btn-block st-mt-12" type="submit" th:formaction="@{/manager/decision/{id}/reject(id=${app.applicationId})}">
+                        <i class="fa-solid fa-circle-xmark"></i> Reject Loan
                     </button>
                 </div>
             </form>
         </div>
     </div>
+
+    <div class="st-card st-pad st-mt-16">
+        <h3 class="st-sec-title"><i class="fa-solid fa-comments"></i> Internal Communication</h3>
+
+        <div class="st-note-box st-mt-12" style="max-height:250px; overflow-y:auto; background: #f8fafc;">
+            <div th:if="${#lists.isEmpty(messages)}" style="text-align: center; color: #94a3b8; padding: 20px;">
+                No internal messages yet.
+            </div>
+            <div th:each="m : ${messages}" style="margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+                <div style="font-size:11px; color:#64748b; margin-bottom:4px;">
+                    <strong th:text="${m.senderRole}"></strong>
+                    <i class="fa-solid fa-arrow-right" style="font-size:9px; margin: 0 4px;"></i>
+                    <strong th:text="${m.receiverRole}"></strong>
+                    <span style="float:right" th:if="${m.createdAt != null}" th:text="${#temporals.format(m.createdAt,'dd MMM yyyy HH:mm')}"></span>
+                </div>
+                <p style="font-size:14px; color:#1e293b; margin:0;" th:text="${m.message}"></p>
+            </div>
+        </div>
+
+        <form method="post" th:action="@{/staff/message/send}" class="st-mt-16">
+            <input type="hidden" name="applicationId" th:value="${app.applicationId}">
+            <input type="hidden" name="senderRole" value="BRANCH_MANAGER">
+
+            <div class="st-grid-2" style="grid-template-columns: 1fr 3fr; gap: 15px;">
+                <div>
+                    <label class="st-label">Send To</label>
+                    <select class="st-select" name="receiverRole" required>
+                        <option value="" disabled selected>Select Recipient</option>
+                        <option value="BANK_OFFICER">Bank Officer</option>
+                        <option value="RISK_OFFICER">Risk Officer</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="st-label">Message</label>
+                    <textarea class="st-textarea" name="message" placeholder="Write a note for the staff..." required></textarea>
+                </div>
+            </div>
+            <button class="st-btn st-btn-navy st-mt-12" style="width: auto; padding: 10px 30px;" type="submit">
+                <i class="fa-solid fa-share"></i> Send Message
+            </button>
+        </form>
+    </div>
 </main>
 
 <div th:replace="~{fragments/footer :: footerSection}"></div>
 
-<script th:src="@{/js/loanhub.js}"></script>
-<script th:src="@{/js/staff_dashboard.js}"></script>
 </body>
 </html>

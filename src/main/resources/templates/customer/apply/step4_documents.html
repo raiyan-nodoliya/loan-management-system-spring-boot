@@ -3,91 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoanHub - Home</title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>LoanHub - Step 4 | Documents</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
     <link rel="stylesheet" th:href="@{/css/loanhub.css}">
     <link rel="stylesheet" th:href="@{/css/customer_dashboard.css}">
+    <style>
+        .db-upload-row { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #edf2f7; transition: background 0.2s; }
+        .db-upload-row:hover { background: #f8fafc; }
+        .status-badge { color: #10b981; font-size: 11px; font-weight: 600; display: block; margin-top: 4px; }
+        .change-btn { background: none; border: none; color: #2563eb; font-size: 11px; cursor: pointer; text-decoration: underline; padding: 0; margin-left: 5px; }
+        .file-input-hidden { display: none; }
+        #scanningLoader { font-size: 11px; margin-top: 5px; font-weight: 500; display: none; color: #2563eb; }
+        .otp-section { background: #f1f5f9; padding: 18px; border-radius: 10px; border: 1px solid #e2e8f0; margin-top: 25px; }
+        .doc-label { font-size: 13px; font-weight: 600; color: #1e293b; }
+        .db-btn-yellow { background-color: #facc15; color: #000; font-weight: 700; }
+    </style>
 </head>
-
 <body>
 
 <div th:replace="~{fragments/customerNavbarSection :: customerNavbarSection}"></div>
 
 <section class="db-hero">
     <div class="db-hero-inner">
-        <h1 class="db-hero-title">Apply for Loan</h1>
-        <p class="db-hero-sub">Step 4 of 4: Documents & Submit</p>
+        <h1 class="db-hero-title">Final Step</h1>
+        <p class="db-hero-sub">Step 4 of 4: Document Verification</p>
     </div>
 </section>
 
 <div class="db-wrap">
-
     <div class="db-stepbar">
-        <div class="db-step"><span class="db-step-dot">1</span> Personal Details</div>
+        <div class="db-step"><span class="db-step-dot">1</span> Personal</div>
         <div class="db-step-line"></div>
-        <div class="db-step"><span class="db-step-dot">2</span> Loan Details</div>
+        <div class="db-step"><span class="db-step-dot">2</span> Loan</div>
         <div class="db-step-line"></div>
-        <div class="db-step"><span class="db-step-dot">3</span> Income & Employment</div>
+        <div class="db-step"><span class="db-step-dot">3</span> Income</div>
         <div class="db-step-line"></div>
-        <div class="db-step active"><span class="db-step-dot">4</span> Documents & Submit</div>
+        <div class="db-step active"><span class="db-step-dot">4</span> Documents</div>
     </div>
 
-    <div class="db-card db-card-pad" style="max-width: 520px; margin: 12px auto 0;">
-        <form th:action="@{/apply/step4_documents}" method="post" enctype="multipart/form-data">
+    <div class="db-card db-card-pad" style="max-width: 600px; margin: 20px auto;">
+        <form th:action="@{/apply/step4_documents}" method="post" enctype="multipart/form-data" id="uploadForm">
 
             <div class="db-upload-row">
-                <div><div style="font-size:11px;font-weight:500;">PAN Card</div></div>
-                <input type="file" name="panFile" accept=".pdf,.jpg,.jpeg,.png" />
+                <div>
+                    <div class="doc-label"><i class="fa-solid fa-id-card"></i> PAN Card</div>
+                    <div id="panLoader" class="loader-box" style="display:none;">
+                        <small style="color:#2563eb;"><i class="fa-solid fa-circle-notch fa-spin"></i> AI Scanning PAN...</small>
+                    </div>
+                    <div th:if="${hasPAN}" id="panStatus">
+                        <span class="status-badge"><i class="fa-solid fa-circle-check"></i> Found in Profile</span>
+                        <button type="button" class="change-btn" onclick="toggleInput('panFile', 'panStatus')">Replace?</button>
+                    </div>
+                </div>
+                <input type="file" id="panFile" name="panFile" accept=".pdf,.jpg,.jpeg,.png"
+                       th:classappend="${hasPAN} ? 'file-input-hidden' : ''" th:required="${!hasPAN}" onchange="showScan(this, 'panLoader')" />
             </div>
-            <small class="db-err" th:if="${panFileError}" th:text="${panFileError}"></small>
 
             <div class="db-upload-row">
-                <div><div style="font-size:11px;font-weight:500;">Aadhaar Card</div></div>
-                <input type="file" name="aadhaarFile" accept=".pdf,.jpg,.jpeg,.png" />
+                <div>
+                    <div class="doc-label"><i class="fa-solid fa-fingerprint"></i> Aadhaar Card</div>
+                    <div th:if="${hasAADHAAR}" id="aadhaarStatus">
+                        <span class="status-badge"><i class="fa-solid fa-circle-check"></i> Found in Profile</span>
+                        <button type="button" class="change-btn" onclick="toggleInput('aadhaarFile', 'aadhaarStatus')">Replace?</button>
+                    </div>
+                </div>
+                <input type="file" id="aadhaarFile" name="aadhaarFile" accept=".pdf,.jpg,.jpeg,.png"
+                       th:classappend="${hasAADHAAR} ? 'file-input-hidden' : ''" th:required="${!hasAADHAAR}" />
             </div>
-            <small class="db-err" th:if="${aadhaarFileError}" th:text="${aadhaarFileError}"></small>
 
             <div class="db-upload-row">
-                <div><div style="font-size:11px;font-weight:500;">Income Proof / Salary Slips</div></div>
-                <input type="file" name="incomeProofFile" accept=".pdf,.jpg,.jpeg,.png" />
+                <div>
+                    <div class="doc-label"><i class="fa-solid fa-file-invoice-dollar"></i> Income Proof (Salary Slip)</div>
+                    <div th:if="${hasINCOME_PROOF}" id="incomeStatus">
+                        <span class="status-badge"><i class="fa-solid fa-circle-check"></i> Found in Profile</span>
+                        <button type="button" class="change-btn" onclick="toggleInput('incomeFile', 'incomeStatus')">Replace?</button>
+                    </div>
+                </div>
+                <input type="file" id="incomeFile" name="incomeProofFile" accept=".pdf,.jpg,.jpeg,.png"
+                       th:classappend="${hasINCOME_PROOF} ? 'file-input-hidden' : ''" th:required="${!hasINCOME_PROOF}" />
             </div>
-            <small class="db-err" th:if="${incomeProofFileError}" th:text="${incomeProofFileError}"></small>
 
             <div class="db-upload-row">
-                <div><div style="font-size:11px;font-weight:500;">Bank Statements (last 6 months)</div></div>
-                <input type="file" name="bankStmtFile" accept=".pdf,.jpg,.jpeg,.png" />
+                <div>
+                    <div class="doc-label"><i class="fa-solid fa-building-columns"></i> Bank Statement (Last 6 Months)</div>
+                    <div th:if="${hasBANK_STATEMENT}" id="bankStatus">
+                        <span class="status-badge"><i class="fa-solid fa-circle-check"></i> Found in Profile</span>
+                        <button type="button" class="change-btn" onclick="toggleInput('bankFile', 'bankStatus')">Replace?</button>
+                    </div>
+                </div>
+                <input type="file" id="bankFile" name="bankStmtFile" accept=".pdf,.jpg,.jpeg,.png"
+                       th:classappend="${hasBANK_STATEMENT} ? 'file-input-hidden' : ''" th:required="${!hasBANK_STATEMENT}" />
             </div>
-            <small class="db-err" th:if="${bankStmtFileError}" th:text="${bankStmtFileError}"></small>
 
             <div class="db-upload-row">
-                <div><div style="font-size:11px;font-weight:500;">Address Proof</div></div>
-                <input type="file" name="addressProofFile" accept=".pdf,.jpg,.jpeg,.png" />
+                <div>
+                    <div class="doc-label"><i class="fa-solid fa-house-chimney"></i> Address Proof (Electricity/Rent)</div>
+                    <div th:if="${hasADDRESS_PROOF}" id="addressStatus">
+                        <span class="status-badge"><i class="fa-solid fa-circle-check"></i> Found in Profile</span>
+                        <button type="button" class="change-btn" onclick="toggleInput('addressFile', 'addressStatus')">Replace?</button>
+                    </div>
+                </div>
+                <input type="file" id="addressFile" name="addressProofFile" accept=".pdf,.jpg,.jpeg,.png"
+                       th:classappend="${hasADDRESS_PROOF} ? 'file-input-hidden' : ''" th:required="${!hasADDRESS_PROOF}" />
             </div>
-            <small class="db-err" th:if="${addressProofFileError}" th:text="${addressProofFileError}"></small>
 
-            <div class="db-upload-note">Accepted formats: PDF, JPG, PNG (max 5MB each)</div>
+            <div class="otp-section">
+                <label style="font-size:12px; font-weight:700; display:block; margin-bottom:10px; color:#475569;">
+                    <i class="fa-solid fa-shield-check"></i> EMAIL OTP VERIFICATION
+                </label>
+                <input type="text" name="otpInput" class="db-input" placeholder="Enter 6-digit OTP" required maxlength="6" />
+                <small class="db-err" th:if="${otpError}" th:text="${otpError}" style="color:#e11d48; margin-top:5px; display:block;"></small>
+            </div>
 
-            <div class="db-form-actions">
-                <a class="db-btn" th:href="@{/apply/step3_income}">
-                    <i class="fa-solid fa-arrow-left"></i> Back
-                </a>
-                <button class="db-btn db-btn-yellow" type="submit">
-                    Submit Application <i class="fa-regular fa-circle-check"></i>
-                </button>
+            <div class="db-form-actions" style="margin-top: 30px;">
+                <a class="db-btn" th:href="@{/apply/step3_income}" style="background:#e2e8f0; color:#475569;">Back</a>
+                <button class="db-btn db-btn-yellow" type="submit">Final Submit Application</button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- ✅ FOOTER (your bug is here: missing quote + bracket) -->
-<div th:replace="~{fragments/footer :: footerSection}"></div>
+<script>
+    // Toggle for replacing old documents
+    function toggleInput(inputId, statusId) {
+        const statusDiv = document.getElementById(statusId);
+        if(statusDiv) statusDiv.style.display = 'none';
 
-<!-- ✅ JS should be at end -->
-<script th:src="@{/js/loanhub.js}"></script>
-<script th:src="@{/js/customer_dashboard.js}"></script>
+        const fileInput = document.getElementById(inputId);
+        if(fileInput) {
+            fileInput.classList.remove('file-input-hidden');
+            fileInput.style.display = 'block';
+            fileInput.setAttribute('required', 'required');
+        }
+    }
+
+    // UX Only: Show a scanning animation when PAN is selected
+    function showScan(input, loaderId) {
+        if(input.files && input.files[0]) {
+            const loader = document.getElementById(loaderId);
+            loader.style.display = 'block';
+            setTimeout(() => {
+                loader.innerHTML = '<small style="color:#10b981;"><i class="fa-solid fa-check"></i> Ready for Upload</small>';
+            }, 2000);
+        }
+    }
+</script>
+
+<div th:replace="~{fragments/footer :: footerSection}"></div>
 </body>
 </html>

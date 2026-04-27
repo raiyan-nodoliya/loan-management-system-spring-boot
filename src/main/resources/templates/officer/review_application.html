@@ -1,154 +1,151 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoanHub - Home</title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>LoanHub - Review Application</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
     <link rel="stylesheet" th:href="@{/css/loanhub.css}">
     <link rel="stylesheet" th:href="@{/css/staff_dashboard.css}">
+    <style>
+        #st-toast {
+            position: fixed; top: 24px; right: 24px; z-index: 9999;
+            min-width: 280px; padding: 16px; border-radius: 12px;
+            color: #fff; display: flex; align-items: center; gap: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            transform: translateX(150%); transition: transform 0.4s ease-in-out;
+        }
+        #st-toast.active { transform: translateX(0); }
+        .toast-success { background: #16a34a; }
+        .toast-error { background: #ef4444; }
+        .st-cibil-card { background: #f8fafc; border: 1px dashed #d8dee8; border-radius: 10px; padding: 16px; margin-top: 12px; }
+        .st-score-large { font-size: 28px; font-weight: 800; }
+        .pan-input-mono { font-family: monospace; text-transform: uppercase; letter-spacing: 1px; }
+        .st-request-box { border-top: 4px solid #facc15; background: #fffbef; }
+    </style>
 </head>
+<body class="st-page">
 
-<body>
+<div id="st-toast" th:if="${toastMessage}" th:classappend="${toastType == 'error' ? 'toast-error' : 'toast-success'}">
+    <i th:class="${toastType == 'error' ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-circle-check'}"></i>
+    <span th:text="${toastMessage}"></span>
+</div>
 
 <div th:replace="~{fragments/staffUsersNavbar :: managerNavbarSection}"></div>
 
 <section class="st-hero">
     <div class="st-hero-inner">
-        <h1 class="st-hero-title" th:text="'Review: ' + ${app.applicationNo}">Review</h1>
-        <p class="st-hero-sub"
-           th:text="${app.customer.name} + ' — ' + (${app.loanType != null ? app.loanType.loanTypeName : 'Loan'})">
-        </p>
+        <div class="st-row">
+            <div>
+                <h1 class="st-hero-title" th:text="${app != null ? 'Review: ' + app.applicationNo : 'Review'}">Review</h1>
+                <p class="st-hero-sub" th:if="${app != null}" th:text="${app.customer.name} + ' — ' + (${app.loanType != null ? app.loanType.loanTypeName : 'Loan'})"></p>
+            </div>
+            <div th:if="${app != null and app.status != null}">
+                <span class="st-pill" th:text="${app.status.label}" style="background: #1e293b; color:white; padding: 6px 16px;"></span>
+            </div>
+        </div>
     </div>
 </section>
 
 <main class="st-wrap">
-    <div class="st-grid-2">
-        <!-- Left -->
-        <div>
+    <div class="st-grid-2" th:if="${app != null}">
+        <div class="st-col">
             <div class="st-card st-pad">
-                <h3 class="st-sec-title">Applicant Information</h3>
-
+                <h3 class="st-sec-title"><i class="fa-solid fa-user-tie"></i> Applicant Details</h3>
                 <div class="st-info-grid">
-                    <div class="st-info-item"><span class="st-info-key">Name:</span>
-                        <span th:text="${app.customer.name}">Name</span>
+                    <div class="st-info-item"><span class="st-info-key">Name:</span> <span th:text="${app.customer.name}"></span></div>
+                    <div class="st-info-item"><span class="st-info-key">Income:</span> <span th:text="'₹' + ${app.monthlyIncome}"></span></div>
+                    <div class="st-info-item"><span class="st-info-key">Requested:</span> <span th:text="'₹' + ${app.amountRequested}"></span></div>
+                </div>
+                <div class="st-cibil-card">
+                    <label class="st-label">CIBIL Verification</label>
+                    <div th:if="${app.cibilScore != null}" class="st-row st-mt-12">
+                        <span class="st-score-large" th:text="${app.cibilScore}" th:style="${app.cibilScore >= 750 ? 'color:green' : 'color:orange'}"></span>
+                        <form th:action="@{/officer/application/{id}/fetch-cibil(id=${app.applicationId})}" method="post">
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" name="panNumber" class="st-input pan-input-mono" placeholder="PAN" required maxlength="10">
+                                <button type="submit" class="st-btn st-btn-navy"><i class="fa-solid fa-sync"></i></button>
+                            </div>
+                        </form>
                     </div>
-
-                    <div class="st-info-item"><span class="st-info-key">Email:</span>
-                        <span th:text="${app.customer.email}">Email</span>
-                    </div>
-
-                    <div class="st-info-item"><span class="st-info-key">Phone:</span>
-                        <span th:text="${app.customer.phone}">Phone</span>
-                    </div>
-
-                    <div class="st-info-item"><span class="st-info-key">Monthly Income:</span>
-                        <span th:text="'₹' + ${app.monthlyIncome}">₹0</span>
-                    </div>
-
-                    <div class="st-info-item"><span class="st-info-key">Purpose:</span>
-                        <span th:text="${app.purpose}">Purpose</span>
-                    </div>
-
-                    <div class="st-info-item"><span class="st-info-key">Amount:</span>
-                        <span th:text="'₹' + ${app.amountRequested}">₹0</span>
-                    </div>
-
-                    <div class="st-info-item"><span class="st-info-key">Tenure:</span>
-                        <span th:text="${app.tenureMonthsRequested} + ' months'">0</span>
-                    </div>
-
-
                 </div>
             </div>
 
             <div class="st-card st-pad st-mt-16">
-                <h3 class="st-sec-title">Officer Notes</h3>
+                <h3 class="st-sec-title">Review Workspace</h3>
+                <textarea id="globalNotes" class="st-textarea st-mt-12" th:text="${app.officerNotes}" placeholder="Internal review notes..."></textarea>
+                <div class="st-actions st-mt-16">
+                    <form th:action="@{/officer/application/{id}/mark-in-review(id=${app.applicationId})}" method="post" class="action-form" style="flex:1">
+                        <input type="hidden" name="officerNotes" class="hidden-notes">
+                        <button class="st-btn st-btn-navy st-btn-block" type="submit">Mark In Review</button>
+                    </form>
+                    <form th:action="@{/officer/application/{id}/forward-risk(id=${app.applicationId})}" method="post" class="action-form" style="flex:1">
+                        <input type="hidden" name="officerNotes" class="hidden-notes">
+                        <button class="st-btn st-btn-navy st-btn-block" type="submit" style="background:#2563eb;">To Risk</button>
+                    </form>
+                </div>
+            </div>
 
-                <form th:action="@{/officer/application/{id}/mark-in-review(id=${app.applicationId})}" method="post">
-                <textarea name="officerNotes" class="st-textarea st-mt-12"
-                  placeholder="Add your review notes here..."
-                  th:text="${app.officerNotes}">
-                </textarea>
-
-                    <div class="st-actions" style="margin-top:12px;">
-                        <button class="st-btn st-btn-navy" type="submit">Mark IN_REVIEW</button>
+            <div class="st-card st-pad st-mt-16 st-request-box">
+                <h3 class="st-sec-title" style="color: #854d0e;"><i class="fa-solid fa-file-circle-question"></i> Request Document</h3>
+                <form th:action="@{/officer/application/{id}/request-info(id=${app.applicationId})}" method="post" class="action-form">
+                    <input type="hidden" name="officerNotes" class="hidden-notes">
+                    <div style="display:flex; flex-direction: column; gap:10px;">
+                        <input type="text" name="needsInfoMessage" class="st-input" placeholder="e.g. LATEST_SALARY_SLIP" required>
+                        <button class="st-btn st-btn-yellow st-btn-block" type="submit">Send Request to Customer</button>
                     </div>
                 </form>
             </div>
-            <div class="st-actions">
-                <!-- Request Info -->
-                <form th:action="@{/officer/application/{id}/request-info(id=${app.applicationId})}" method="post" style="display:inline;">
-                    <input type="hidden" name="officerNotes" th:value="${app.officerNotes}">
-                    <input class="st-input" name="needsInfoMessage" placeholder="Write what customer must upload..." required>
-                    <button class="st-btn" type="submit">Request Info</button>
-                </form>
-
-                <!-- Forward to Risk -->
-                <form th:action="@{/officer/application/{id}/forward-risk(id=${app.applicationId})}" method="post" style="display:inline;">
-                    <input type="hidden" name="officerNotes" th:value="${app.officerNotes}">
-                    <button class="st-btn st-btn-yellow" type="submit">Forward to Risk Officer</button>
-                </form>
-            </div>
-
-
         </div>
 
-        <!-- Right -->
-        <div>
+        <div class="st-col">
             <div class="st-card st-pad">
-                <h3 class="st-sec-title">KYC Documents</h3>
-
+                <h3 class="st-sec-title">Uploaded Documents</h3>
                 <div class="st-doc-list">
-
-                    <div th:if="${documents == null || #lists.isEmpty(documents)}" class="st-doc-row">
-                        <div class="st-doc-left">No documents uploaded</div>
-                        <span class="st-pill st-pill-pending">Pending</span>
-                    </div>
-
-                    <div class="st-doc-row" th:each="d : ${documents}">
-                        <div class="st-doc-left">
-                            <i class="fa-regular fa-file-lines"></i>
-                            <span th:text="${d.documentType + ' (v' + d.versionNo + ')'}">PAN</span>
-                        </div>
-
-                        <div style="display:flex; gap:10px; align-items:center;">
-                        <span class="st-pill"
-                              th:classappend="${d.isLatest} ? ' st-pill-uploaded' : ' st-pill-pending'"
-                              th:text="${d.isLatest} ? 'Uploaded' : 'Pending'">Uploaded
-                        </span>
-
-                            <a class="st-btn st-btn-navy"
-                               th:href="@{'/files/' + ${d.filePath}}"
-                               target="_blank">
-                                View
-                            </a>
-                        </div>
+                    <div th:each="d : ${documents}" class="st-doc-row" style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between;">
+                        <span><i class="fa-solid fa-file-pdf" style="color:red"></i> [[${d.documentType}]] (v[[${d.versionNo}]])</span>
+                        <a class="st-btn st-btn-sm" th:href="@{'/files/' + ${d.filePath}}" target="_blank">View</a>
                     </div>
                 </div>
             </div>
 
             <div class="st-card st-pad st-mt-16">
-                <div class="st-status-line">
-                    <span class="st-info-key">Current Status:</span>
-                    <span class="st-pill st-pill-submitted"
-                          th:text="${app.status != null ? app.status.label : 'N/A'}">
-</span>
+                <h3 class="st-sec-title">Internal Communication</h3>
+                <div class="st-note-box st-mt-12" style="max-height:200px; overflow-y:auto; background: #f9f9f9; padding: 10px;">
+                    <div th:each="m : ${messages}" style="margin-bottom:12px; border-bottom:1px solid #eee;">
+                        <span class="st-pill" th:text="${m.senderRole}" style="font-size: 0.7rem;"></span>
+                        <p th:text="${m.message}" style="margin:4px 0;"></p>
+                    </div>
                 </div>
+                <form method="post" th:action="@{/staff/message/send}" class="st-mt-12">
+                    <input type="hidden" name="applicationId" th:value="${app.applicationId}">
+                    <input type="hidden" name="senderRole" value="BANK_OFFICER">
+                    <div style="display:flex; gap:5px;">
+                        <select class="st-select" name="receiverRole" required style="width: 120px;">
+                            <option value="RISK_OFFICER">Risk</option>
+                            <option value="MANAGER">Manager</option>
+                        </select>
+                        <input class="st-input" name="message" placeholder="Type message..." required style="flex:1;">
+                        <button class="st-btn st-btn-navy" type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 </main>
 
-<!-- ✅ FOOTER (your bug is here: missing quote + bracket) -->
-<div th:replace="~{fragments/footer :: footerSection}"></div>
-
-<!-- ✅ JS should be at end -->
-<script th:src="@{/js/loanhub.js}"></script>
-<script th:src="@{/js/staff_dashboard.js}"></script>
+<script>
+    window.addEventListener('DOMContentLoaded', () => {
+        const t = document.getElementById('st-toast');
+        if(t){ t.classList.add('active'); setTimeout(() => t.classList.remove('active'), 4000); }
+    });
+    document.querySelectorAll('.action-form').forEach(f => {
+        f.addEventListener('submit', function(){
+            const noteValue = document.getElementById('globalNotes').value;
+            const hiddenNoteInput = this.querySelector('.hidden-notes');
+            if(hiddenNoteInput) hiddenNoteInput.value = noteValue;
+        });
+    });
+</script>
 </body>
 </html>

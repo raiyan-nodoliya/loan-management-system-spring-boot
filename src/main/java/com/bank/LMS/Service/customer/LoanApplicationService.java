@@ -35,20 +35,16 @@ public class LoanApplicationService {
         this.loanStatusRepo = loanStatusRepo;
     }
 
-    // =========================================================
-    // STEP-1: Draft create/load
-    // =========================================================
+    // --- APPLICATION DRAFT & UPDATE LOGIC ---
+
     @Transactional
     public LoanApplication createOrLoadDraft(Long customerId, Long existingAppId) {
-
         Customer customer = customerRepo.findById(customerId)
                 .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
 
         if (existingAppId != null) {
             LoanApplication existing = appRepo.findById(existingAppId).orElse(null);
-            if (existing != null
-                    && existing.getCustomer() != null
-                    && existing.getCustomer().getCustomerId().equals(customerId)) {
+            if (existing != null && existing.getCustomer() != null && existing.getCustomer().getCustomerId().equals(customerId)) {
                 return existing;
             }
         }
@@ -56,18 +52,10 @@ public class LoanApplicationService {
         LoanApplication draft = new LoanApplication();
         draft.setCustomer(customer);
         draft.setApplicationNo(generateApplicationNo());
-
-        LoanApplicationStatus draftStatus = loanStatusRepo.findByStatusCode("DRAFT")
-                .orElseThrow(() -> new IllegalStateException("DRAFT status missing"));
-        draft.setStatus(draftStatus);
-
-        // IMPORTANT:
-        // DB me agar ye columns NOT NULL hain, to draft create time par safe default do
+        draft.setStatus(loanStatusRepo.findByStatusCode("DRAFT").orElseThrow());
         draft.setAmountRequested(BigDecimal.ZERO);
         draft.setTenureMonthsRequested(0);
         draft.setMonthlyIncome(BigDecimal.ZERO);
-
-        // Optional text fields
         draft.setPurpose("");
         draft.setEmployerName("");
         draft.setDesignation("");
@@ -76,107 +64,74 @@ public class LoanApplicationService {
         return appRepo.save(draft);
     }
 
-    // =========================================================
-    // STEP-1: Update Customer personal
-    // =========================================================
     @Transactional
-    public void updateCustomerPersonal(Long customerId,
-                                       String name,
-                                       String phone,
-                                       LocalDate dob,
-                                       String address) {
-
-        Customer customer = customerRepo.findById(customerId)
-                .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
-
+    public void updateCustomerPersonal(Long customerId, String name, String phone, LocalDate dob, String address) {
+        Customer customer = customerRepo.findById(customerId).orElseThrow();
         if (name != null && !name.isBlank()) customer.setName(name);
         if (phone != null && !phone.isBlank()) customer.setPhone(phone);
         if (dob != null) customer.setDob(dob);
         if (address != null && !address.isBlank()) customer.setAddress(address);
-
         customerRepo.save(customer);
     }
 
-    // =========================================================
-    // STEP-2: Save Loan details
-    // =========================================================
     @Transactional
-    public void saveLoanDetails(Long appId,
-                                Long loanTypeId,
-                                BigDecimal amountRequested,
-                                Integer tenureMonthsRequested,
-                                String purpose) {
-
-        LoanApplication app = appRepo.findById(appId)
-                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + appId));
-
-        LoanType loanType = loanTypeRepo.findById(loanTypeId)
-                .orElseThrow(() -> new IllegalArgumentException("LoanType not found: " + loanTypeId));
-
-        app.setLoanType(loanType);
+    public void saveLoanDetails(Long appId, Long loanTypeId, BigDecimal amountRequested, Integer tenureMonthsRequested, String purpose) {
+        LoanApplication app = appRepo.findById(appId).orElseThrow();
+        app.setLoanType(loanTypeRepo.findById(loanTypeId).orElseThrow());
         app.setAmountRequested(amountRequested);
         app.setTenureMonthsRequested(tenureMonthsRequested);
         app.setPurpose(purpose);
-
         appRepo.save(app);
     }
 
-    // =========================================================
-    // STEP-3: Save income/employment
-    // =========================================================
     @Transactional
-    public void saveIncomeEmployment(Long appId,
-                                     String employerName,
-                                     String designation,
-                                     BigDecimal monthlyIncome,
-                                     Integer experienceYears) {
+    public void updateCustomerPan(Long customerId, String panNumber) {
+        Customer customer = customerRepo.findById(customerId).orElseThrow();
+        if (panNumber != null && !panNumber.isBlank()) {
+            customer.setPanCard(panNumber.toUpperCase().trim());
+            customerRepo.save(customer);
+        }
+    }
 
-        LoanApplication app = appRepo.findById(appId)
-                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + appId));
-
+    @Transactional
+    public void saveIncomeEmployment(Long appId, String employerName, String designation, BigDecimal monthlyIncome, Integer experienceYears) {
+        LoanApplication app = appRepo.findById(appId).orElseThrow();
         app.setEmployerName(employerName);
         app.setDesignation(designation);
         app.setMonthlyIncome(monthlyIncome);
         app.setExperienceYears(experienceYears);
-
         appRepo.save(app);
     }
 
-    // =========================================================
-    // STEP-4: Upload document
-    // =========================================================
+    // --- BUG #3 FIX: DOCUMENT VERSIONING LOGIC ---
+
     @Transactional
     public void uploadDocument(Long appId, String docType, MultipartFile file) throws Exception {
-
         if (file == null || file.isEmpty()) return;
 
-        LoanApplication app = appRepo.findById(appId)
-                .orElseThrow(() -> new IllegalArgumentException("Application not found: " + appId));
+        LoanApplication app = appRepo.findById(appId).orElseThrow();
+        Long custId = app.getCustomer().getCustomerId();
 
-        Customer customer = app.getCustomer();
-        if (customer == null) throw new IllegalStateException("Application has no customer.");
+        // 1. Current Max Version dhoondho (Customer level par)
+        Integer currentMax = docRepo.findMaxVersionByCustomer(custId, docType);
+        int nextVersion = (currentMax == null) ? 1 : currentMax + 1;
 
+        // 2. Is Customer ke is Type ke purane saare documents 'isLatest = false' mark karo
+        docRepo.markAllOldVersionsAsNotLatest(custId, docType);
+
+        // 3. Naya file storage mein save karo
         var stored = storage.store(file, app.getApplicationNo(), docType);
 
-        int nextVersion = 1;
-        var lastLatest = docRepo
-                .findTopByApplication_ApplicationIdAndDocumentTypeAndIsLatestTrueOrderByVersionNoDesc(appId, docType);
-
-        if (lastLatest.isPresent()) {
-            Integer lastV = lastLatest.get().getVersionNo();
-            nextVersion = (lastV == null ? 1 : lastV + 1);
-            docRepo.markOldLatestFalse(appId, docType);
-        }
-
+        // 4. Database mein naya entry create karo (Latest flag ke sath)
         LoanDocument doc = LoanDocument.builder()
                 .application(app)
-                .customer(customer)
+                .customer(app.getCustomer())
                 .documentType(docType)
                 .fileName(stored.fileName())
                 .filePath(stored.filePath())
-                .originalFileName(stored.originalFileName())
-                .mimeType(stored.mimeType())
-                .fileSizeBytes(stored.sizeBytes())
+                .originalFileName(file.getOriginalFilename())
+                .mimeType(file.getContentType())
+                .fileSizeBytes(file.getSize())
                 .versionNo(nextVersion)
                 .isLatest(true)
                 .status(LoanDocument.DocumentStatus.UPLOADED)
@@ -185,59 +140,53 @@ public class LoanApplicationService {
         docRepo.save(doc);
     }
 
-    // =========================================================
-    // FINAL: Submit application
-    // =========================================================
+    // --- BUG #4 FIX: OFFICER-DRIVEN CIBIL SCORE ---
+
+    /**
+     * Ye method ab Customer Controller se CALL NAHI HOGA.
+     * Isko Officer Controller call karega.
+     */
+    @Transactional
+    public void generateCibilScore(Long appId) {
+        LoanApplication app = appRepo.findById(appId).orElseThrow();
+
+        // Banking Logic Simulation
+        int score = 650; // Base Score
+
+        // Salary Factor
+        if (app.getMonthlyIncome().compareTo(new BigDecimal("50000")) > 0) score += 100;
+        else if (app.getMonthlyIncome().compareTo(new BigDecimal("25000")) > 0) score += 50;
+
+        // Experience Factor
+        if (app.getExperienceYears() >= 5) score += 100;
+        else if (app.getExperienceYears() >= 2) score += 50;
+
+        app.setCibilScore(Math.min(score, 850));
+        appRepo.save(app);
+        // Note: Save hone ke baad ye teeno (Officer, Risk, Manager) ko automatically dikhega.
+    }
+
     @Transactional
     public void submitApplication(Long appId) {
-        try {
-            LoanApplication app = appRepo.findById(appId)
-                    .orElseThrow(() -> new IllegalArgumentException("Application not found: " + appId));
+        LoanApplication app = appRepo.findById(appId).orElseThrow();
+        validateBeforeSubmit(app);
 
-            validateBeforeSubmit(app);
+        // Change status to SUBMITTED
+        app.setStatus(loanStatusRepo.findByStatusCode("SUBMITTED").orElseThrow());
+        app.setSubmittedAt(LocalDateTime.now());
 
-            LoanApplicationStatus submittedStatus = loanStatusRepo.findByStatusCode("SUBMITTED")
-                    .orElseThrow(() -> new IllegalStateException("SUBMITTED status missing"));
-
-            app.setStatus(submittedStatus);
-            app.setSubmittedAt(LocalDateTime.now());
-
-            appRepo.saveAndFlush(app);
-
-        } catch (Exception e) {
-            System.out.println("SUBMIT FAILED: " + e.getClass().getName() + " -> " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
+        appRepo.saveAndFlush(app);
     }
 
-    // =========================================================
-    // VALIDATION BEFORE SUBMIT
-    // =========================================================
     private void validateBeforeSubmit(LoanApplication app) {
-        if (app.getLoanType() == null) {
-            throw new IllegalStateException("Loan type is required");
+        if (app.getLoanType() == null || app.getAmountRequested().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("Missing mandatory loan details");
         }
-
-        if (app.getAmountRequested() == null || app.getAmountRequested().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("Amount requested must be greater than 0");
-        }
-
-        if (app.getTenureMonthsRequested() == null || app.getTenureMonthsRequested() <= 0) {
-            throw new IllegalStateException("Tenure months is required");
-        }
-
-        if (app.getMonthlyIncome() == null || app.getMonthlyIncome().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("Monthly income must be greater than 0");
-        }
+        // Basic Check: Kya PAN aur Aadhaar uploaded hain?
+        // (Iska logic aap docRepo.countByApplicationAndIsLatestTrue se add kar sakte hain)
     }
 
-    // =========================================================
-    // Utility
-    // =========================================================
     private String generateApplicationNo() {
-        String date = java.time.LocalDate.now().toString().replace("-", "");
-        String rand = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
-        return "LA-" + date + "-" + rand;
+        return "LA-" + LocalDate.now().toString().replace("-", "") + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
     }
 }

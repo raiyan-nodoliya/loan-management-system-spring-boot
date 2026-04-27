@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoanHub - Risk Evaluation</title>
-
     <link rel="stylesheet" th:href="@{/css/loanhub.css}">
     <link rel="stylesheet" th:href="@{/css/staff_dashboard.css}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
@@ -15,14 +14,8 @@
 
 <section class="st-hero">
     <div class="st-hero-inner">
-        <h1 class="st-hero-title">
-            Risk Evaluation: <span th:text="${app.applicationNo}">LH-2024-0002</span>
-        </h1>
-        <p class="st-hero-sub">
-            <span th:text="${app.customer.name}">Priya Patel</span>
-            —
-            <span th:text="'₹' + ${#numbers.formatDecimal(app.amountRequested, 0, 'COMMA', 0, 'POINT')}">₹35,00,000</span>
-        </p>
+        <h1 class="st-hero-title"><i class="fa-solid fa-shield-halved"></i> Risk Evaluation: <span th:text="${app.applicationNo}"></span></h1>
+        <p class="st-hero-sub" th:text="${app.customer.name} + ' — ₹' + ${#numbers.formatDecimal(app.amountRequested, 0, 'COMMA', 0, 'POINT')}"></p>
     </div>
 </section>
 
@@ -31,106 +24,141 @@
         <div class="st-grid-2-eq">
 
             <div class="st-card st-pad">
-                <h3 class="st-sec-title">Applicant Summary</h3>
-
+                <h3 class="st-sec-title"><i class="fa-solid fa-address-card"></i> Applicant Summary</h3>
                 <div class="st-info-grid">
-                    <div class="st-info-item">
-                        <span class="st-info-key">Employer:</span>
-                        <span th:text="${app.employerName}">Infosys</span>
-                    </div>
+                    <div class="st-info-item"><span class="st-info-key">Employer:</span> <span th:text="${app.employerName}"></span></div>
+                    <div class="st-info-item"><span class="st-info-key">Designation:</span> <span th:text="${app.designation}"></span></div>
+                    <div class="st-info-item"><span class="st-info-key">Loan Amount:</span> <span th:text="'₹' + ${#numbers.formatDecimal(app.amountRequested, 0, 'COMMA', 0, 'POINT')}"></span></div>
+                    <div class="st-info-item"><span class="st-info-key">Tenure:</span> <span th:text="${app.tenureMonthsRequested} + ' months'"></span></div>
 
-                    <div class="st-info-item">
-                        <span class="st-info-key">Income:</span>
-                        <span th:text="'₹' + ${#numbers.formatDecimal(app.monthlyIncome, 0, 'COMMA', 0, 'POINT')} + '/mo'">₹95,000/mo</span>
-                    </div>
-
-                    <div class="st-info-item">
-                        <span class="st-info-key">Loan Amount:</span>
-                        <span th:text="'₹' + ${#numbers.formatDecimal(app.amountRequested, 0, 'COMMA', 0, 'POINT')}">₹35,00,000</span>
-                    </div>
-
-                    <div class="st-info-item">
-                        <span class="st-info-key">Tenure:</span>
-                        <span th:text="${app.tenureMonthsRequested} + ' months'">240 months</span>
+                    <div class="st-info-item" style="grid-column: span 2; margin-top: 10px; padding: 10px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #6366f1;">
+                        <span class="st-info-key"><i class="fa-solid fa-gauge-high"></i> Credit Worthiness (CIBIL):</span>
+                        <strong th:text="${app.cibilScore ?: 'N/A'}"
+                                th:style="${app.cibilScore != null && app.cibilScore >= 750 ? 'color: #16a34a; font-size: 1.1rem;' : 'color: #ea580c; font-size: 1.1rem;'}"></strong>
                     </div>
                 </div>
 
-                <div class="st-label">Officer Notes:</div>
-                <div class="st-note-box"
-                     th:text="${app.officerNotes != null ? app.officerNotes : 'No notes available'}">
-                    No notes available
-                </div>
-
-                <div th:if="${existingAssessment != null}" class="st-mt-12">
-                    <div class="st-label">Previous Risk Result</div>
-                    <div class="st-note-box">
-                        <div><strong>Recommendation:</strong>
-                            <span th:text="${existingAssessment.recommendationStatus.label}">Recommended</span>
-                        </div>
-                        <div class="st-mt-8"><strong>Risk Score:</strong>
-                            <span th:text="${existingAssessment.riskScore}">82</span>
-                        </div>
-                        <div class="st-mt-8"><strong>Remarks:</strong>
-                            <span th:text="${existingAssessment.remarks}">Good applicant</span>
-                        </div>
-                    </div>
-                </div>
+                <div class="st-label st-mt-16">Bank Officer Notes:</div>
+                <div class="st-note-box" style="background: #f1f5f9; min-height: 60px;" th:text="${app.officerNotes != null && !#strings.isEmpty(app.officerNotes) ? app.officerNotes : 'No notes provided by officer.'}"></div>
             </div>
 
             <div class="st-card st-pad">
-                <h3 class="st-sec-title">Risk Assessment</h3>
+                <h3 class="st-sec-title"><i class="fa-solid fa-chart-line"></i> Risk Assessment</h3>
 
                 <div class="st-form-2 st-mt-12">
                     <div>
-                        <label class="st-label" style="margin-top:0;">Monthly Income (₹)</label>
-                        <input class="st-input"
-                               type="number"
-                               step="0.01"
-                               name="monthlyIncome"
-                               th:value="${app.monthlyIncome != null ? app.monthlyIncome : 0}"
-                               required>
+                        <label class="st-label">Monthly Income (₹)</label>
+                        <input class="st-input" type="number" step="0.01" id="incomeField" name="monthlyIncome" th:value="${app.monthlyIncome}" required>
                     </div>
                     <div>
-                        <label class="st-label" style="margin-top:0;">Existing EMIs (₹)</label>
-                        <input class="st-input"
-                               type="number"
-                               step="0.01"
-                               name="existingEmis"
-                               th:value="${app.existingEmis != null ? app.existingEmis : 0}"
-                               required>
+                        <label class="st-label">Existing EMIs (₹)</label>
+                        <input class="st-input" type="number" step="0.01" id="emiField" name="existingEmis" th:value="${defaultEmis}" required>
                     </div>
                 </div>
 
-                <div class="st-note-box st-mt-12">
-                    <div style="font-size:12px; color:#64748b; font-weight:700;">DTI / FOIR Ratio</div>
-                    <div style="font-size:24px; font-weight:900; color:#0f172a; margin-top:4px;"
-                         th:text="${foir} + '%'">15.4%</div>
+                <div class="st-note-box st-mt-12" style="text-align: center; border: 2px dashed #cbd5e1; background: #fff;">
+                    <div style="font-size:11px; color:#64748b; font-weight:700; text-transform: uppercase; letter-spacing: 1px;">Debt-to-Income (FOIR) Ratio</div>
+                    <div id="foirDisplay" style="font-size:36px; font-weight:900; color:#1e293b;" th:text="${foir} + '%'">0%</div>
+                    <div id="foirMessage" style="font-size:12px; margin-top:4px; font-weight: 500;"></div>
                 </div>
 
-                <label class="st-label">Recommendation</label>
-                <select class="st-select" name="recommendation" required>
-                    <option value="">Select</option>
-                    <option value="APPROVE">Approve</option>
-                    <option value="REJECT">Reject</option>
-                    <option value="NEED_MORE_INFO">Need More Info</option>
-                </select>
+                <div class="st-mt-12">
+                    <label class="st-label">Recommendation</label>
+                    <select class="st-select" name="recommendation" required>
+                        <option value="" disabled selected>Select Action</option>
+                        <option value="APPROVE">Recommend Approval</option>
+                        <option value="REJECT">Reject Application</option>
+                        <option value="NEED_MORE_INFO">Need More Info</option>
+                    </select>
+                </div>
 
-                <label class="st-label">Notes</label>
-                <textarea class="st-textarea"
-                          name="notes"
-                          placeholder="Risk assessment notes..."></textarea>
+                <div class="st-mt-12">
+                    <label class="st-label">Risk Notes / Remarks</label>
+                    <textarea class="st-textarea" name="notes" placeholder="Enter detailed risk analysis..." th:text="${existingAssessment != null ? existingAssessment.remarks : ''}"></textarea>
+                </div>
 
-                <button class="st-btn st-btn-yellow st-btn-block st-mt-12" type="submit">
-                    Submit Evaluation
+                <button class="st-btn st-btn-yellow st-btn-block st-mt-16" type="submit">
+                    <i class="fa-solid fa-circle-check"></i> Submit Risk Evaluation
                 </button>
             </div>
         </div>
     </form>
+
+    <div class="st-card st-pad st-mt-16">
+        <h3 class="st-sec-title"><i class="fa-solid fa-comments"></i> Internal Discussion</h3>
+        <div class="st-note-box st-mt-12" style="max-height:200px; overflow-y:auto; background: #f8fafc;">
+            <div th:if="${#lists.isEmpty(messages)}" style="text-align: center; color: #94a3b8; padding: 15px;">
+                No internal messages.
+            </div>
+            <div th:each="m : ${messages}" style="margin-bottom:10px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+                <div style="font-size:11px; color:#64748b;">
+                    <b th:text="${m.senderRole}"></b> → <b th:text="${m.receiverRole}"></b>
+                    <span style="float:right" th:text="${#temporals.format(m.createdAt,'dd MMM, HH:mm')}"></span>
+                </div>
+                <div style="font-size:13px; color:#334155; margin-top:3px;" th:text="${m.message}"></div>
+            </div>
+        </div>
+
+        <form method="post" th:action="@{/staff/message/send}" class="st-mt-12">
+            <input type="hidden" name="applicationId" th:value="${app.applicationId}">
+            <input type="hidden" name="senderRole" value="RISK_OFFICER">
+            <div class="st-grid-2" style="grid-template-columns: 200px 1fr; gap: 10px;">
+                <select class="st-select" name="receiverRole" required>
+                    <option value="BANK_OFFICER">To: Bank Officer</option>
+                    <option value="MANAGER">To: Branch Manager</option>
+                </select>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" class="st-input" name="message" placeholder="Type a quick note..." required>
+                    <button class="st-btn st-btn-navy" type="submit" style="white-space: nowrap;">Send</button>
+                </div>
+            </div>
+        </form>
+    </div>
 </main>
 
 <div th:replace="~{fragments/footer :: footerSection}"></div>
 
-<script th:src="@{/js/loanhub.js}"></script>
-<script th:src="@{/js/staff_dashboard.js}"></script>
+<script>
+    const incomeInput = document.getElementById('incomeField');
+    const emiInput = document.getElementById('emiField');
+    const foirDisplay = document.getElementById('foirDisplay');
+    const foirMessage = document.getElementById('foirMessage');
+
+    function calculateFOIR() {
+        const income = parseFloat(incomeInput.value) || 0;
+        const emi = parseFloat(emiInput.value) || 0;
+
+        if (income > 0) {
+            const foir = (emi * 100) / income;
+            foirDisplay.innerText = foir.toFixed(2) + '%';
+
+            // Logic and visual feedback
+            if (foir > 50) {
+                foirDisplay.style.color = '#e11d48'; // Red
+                foirMessage.innerText = "Critical: Debt is more than 50% of income!";
+                foirMessage.style.color = '#e11d48';
+            } else if (foir > 35) {
+                foirDisplay.style.color = '#ea580c'; // Orange
+                foirMessage.innerText = "Warning: Moderate debt levels.";
+                foirMessage.style.color = '#ea580c';
+            } else {
+                foirDisplay.style.color = '#16a34a'; // Green
+                foirMessage.innerText = "Safe: Healthy Debt-to-Income ratio.";
+                foirMessage.style.color = '#16a34a';
+            }
+        } else {
+            foirDisplay.innerText = '0%';
+            foirMessage.innerText = "";
+        }
+    }
+
+    // Event Listeners for real-time calculation
+    incomeInput.addEventListener('input', calculateFOIR);
+    emiInput.addEventListener('input', calculateFOIR);
+
+    // Initial run on page load
+    document.addEventListener('DOMContentLoaded', calculateFOIR);
+</script>
+
 </body>
 </html>

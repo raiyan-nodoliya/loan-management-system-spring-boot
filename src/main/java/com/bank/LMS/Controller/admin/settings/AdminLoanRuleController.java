@@ -45,6 +45,7 @@ public class AdminLoanRuleController {
                            @RequestParam Integer maxTenureMonths,
                            @RequestParam BigDecimal interestRateMin,
                            @RequestParam BigDecimal interestRateMax,
+                           @RequestParam(required = false) String customTenures, // Naya field
                            RedirectAttributes ra) {
 
         try {
@@ -77,19 +78,15 @@ public class AdminLoanRuleController {
             }
 
             loanRuleService.saveRule(
-                    loanTypeId,
-                    minMonthlyIncome,
-                    maxAmount,
-                    maxTenureMonths,
-                    interestRateMin,
-                    interestRateMax
+                    loanTypeId, minMonthlyIncome, maxAmount,
+                    maxTenureMonths, interestRateMin, interestRateMax,
+                    customTenures // Service mein pass karo
             );
 
-            ra.addFlashAttribute("success", "Loan rule saved successfully");
+            ra.addFlashAttribute("success", "Loan rule & tenures saved successfully");
         } catch (Exception e) {
             ra.addFlashAttribute("error", e.getMessage());
         }
-
         return "redirect:/admin/loan_rules";
     }
 }

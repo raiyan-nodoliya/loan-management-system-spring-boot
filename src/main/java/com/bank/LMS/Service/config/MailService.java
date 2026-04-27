@@ -132,4 +132,24 @@ public class MailService {
             System.out.println("STAFF ACCOUNT CREATED MAIL ERROR: " + e.getMessage());
         }
     }
+
+
+    // MailService.java mein ye method add karo
+    public void sendApplicationVerificationOtp(String toEmail, String otp) {
+        try {
+            SimpleMailMessage msg = new SimpleMailMessage();
+            msg.setTo(toEmail);
+            msg.setSubject("LoanHub - Application Verification OTP");
+            msg.setText(
+                    "Hello,\n\n" +
+                            "Thank you for applying with LoanHub.\n" +
+                            "Your verification OTP to submit the application is: " + otp + "\n\n" +
+                            "This OTP is valid for 10 minutes.\n\n" +
+                            "Thanks,\nLoanHub Team"
+            );
+            mailSender.send(msg);
+        } catch (Exception e) {
+            System.out.println("APPLICATION OTP MAIL ERROR: " + e.getMessage());
+        }
+    }
 }

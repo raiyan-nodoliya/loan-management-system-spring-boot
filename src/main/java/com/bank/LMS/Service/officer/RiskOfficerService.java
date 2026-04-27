@@ -1,15 +1,7 @@
 package com.bank.LMS.Service.officer;
 
-import com.bank.LMS.Entity.LoanApplication;
-import com.bank.LMS.Entity.LoanApplicationStatus;
-import com.bank.LMS.Entity.RiskAssessment;
-import com.bank.LMS.Entity.RiskRecommendationStatus;
-import com.bank.LMS.Entity.StaffUsers;
-import com.bank.LMS.Repository.LoanApplicationRepository;
-import com.bank.LMS.Repository.LoanApplicationStatusRepository;
-import com.bank.LMS.Repository.RiskAssessmentRepository;
-import com.bank.LMS.Repository.RiskRecommendationStatusRepository;
-import com.bank.LMS.Repository.StaffUsersRepository;
+import com.bank.LMS.Entity.*;
+import com.bank.LMS.Repository.*;
 import com.bank.LMS.Service.config.MailService;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -31,6 +23,7 @@ public class RiskOfficerService {
     private final RiskAssessmentRepository riskAssessmentRepository;
     private final RiskRecommendationStatusRepository riskRecommendationStatusRepository;
     private final StaffUsersRepository staffUsersRepository;
+    private final EmiScheduleRepository emiScheduleRepository; // Naya Injection
     private final MailService mailService;
 
     public RiskOfficerService(LoanApplicationRepository loanApplicationRepository,
@@ -38,12 +31,14 @@ public class RiskOfficerService {
                               RiskAssessmentRepository riskAssessmentRepository,
                               RiskRecommendationStatusRepository riskRecommendationStatusRepository,
                               StaffUsersRepository staffUsersRepository,
+                              EmiScheduleRepository emiScheduleRepository, // Added to Constructor
                               MailService mailService) {
         this.loanApplicationRepository = loanApplicationRepository;
         this.loanApplicationStatusRepository = loanApplicationStatusRepository;
         this.riskAssessmentRepository = riskAssessmentRepository;
         this.riskRecommendationStatusRepository = riskRecommendationStatusRepository;
         this.staffUsersRepository = staffUsersRepository;
+        this.emiScheduleRepository = emiScheduleRepository;
         this.mailService = mailService;
     }
 
@@ -81,16 +76,23 @@ public class RiskOfficerService {
         return riskAssessmentRepository.findByApplication(app).orElse(null);
     }
 
+    // FEATURE: Pehle se chal rahi EMIs ka total nikalne ka logic
     @Transactional(readOnly = true)
-    public BigDecimal calculateFoir(BigDecimal monthlyIncome, BigDecimal existingEmis) {
+    public BigDecimal getSystemCalculatedEmis(Long customerId) {
+        BigDecimal sum = emiScheduleRepository.sumPendingEmisByCustomerId(customerId);
+        return (sum != null) ? sum : BigDecimal.ZERO;
+    }
+
+    @Transactional(readOnly = true)
+    public BigDecimal calculateFoir(BigDecimal monthlyIncome, BigDecimal totalEmis) {
         if (monthlyIncome == null || monthlyIncome.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
         }
-        if (existingEmis == null) {
-            existingEmis = BigDecimal.ZERO;
+        if (totalEmis == null) {
+            totalEmis = BigDecimal.ZERO;
         }
 
-        return existingEmis
+        return totalEmis
                 .multiply(BigDecimal.valueOf(100))
                 .divide(monthlyIncome, 2, RoundingMode.HALF_UP);
     }
@@ -101,17 +103,20 @@ public class RiskOfficerService {
                                   BigDecimal requestedAmount) {
 
         int score = 0;
-
         BigDecimal foir = calculateFoir(monthlyIncome, existingEmis);
 
+        // FOIR Based Scoring
         if (foir.compareTo(BigDecimal.valueOf(20)) <= 0) {
             score += 20;
         } else if (foir.compareTo(BigDecimal.valueOf(35)) <= 0) {
             score += 12;
+        } else if (foir.compareTo(BigDecimal.valueOf(50)) <= 0) {
+            score += 8;
         } else {
-            score += 5;
+            score += 3;
         }
 
+        // Income Based Scoring
         if (monthlyIncome != null) {
             if (monthlyIncome.compareTo(BigDecimal.valueOf(100000)) >= 0) {
                 score += 25;
@@ -122,6 +127,7 @@ public class RiskOfficerService {
             }
         }
 
+        // Loan Amount Based Scoring
         if (requestedAmount != null) {
             if (requestedAmount.compareTo(BigDecimal.valueOf(1000000)) <= 0) {
                 score += 25;
@@ -132,8 +138,8 @@ public class RiskOfficerService {
             }
         }
 
-        score += 20;
-        score += 10;
+        // Default points for stability (Employer/Tenure logic can be added here)
+        score += 30;
 
         return Math.min(score, 100);
     }
@@ -146,7 +152,7 @@ public class RiskOfficerService {
 
     public boolean submitEvaluation(Long applicationId,
                                     BigDecimal monthlyIncome,
-                                    BigDecimal existingEmis,
+                                    BigDecimal totalEmis,
                                     String recommendation,
                                     String notes) {
 
@@ -154,11 +160,11 @@ public class RiskOfficerService {
         if (appOpt.isEmpty()) return false;
 
         LoanApplication app = appOpt.get();
-
         StaffUsers currentOfficer = getCurrentStaffUser();
         if (currentOfficer == null) return false;
 
-        int riskScore = calculateRiskScore(monthlyIncome, existingEmis, app.getAmountRequested());
+        // Scoring based on the updated EMIs
+        int riskScore = calculateRiskScore(monthlyIncome, totalEmis, app.getAmountRequested());
         String riskLevel = autoRiskLevel(riskScore);
 
         String rrCode;
@@ -177,33 +183,22 @@ public class RiskOfficerService {
                 rrCode = "NEED_MORE_INFO";
                 appStatusCode = "NEEDS_INFO";
             }
-            default -> {
-                return false;
-            }
+            default -> { return false; }
         }
 
+        // Overriding logic if Risk is too high but officer recommends approval
         if ("HIGH".equals(riskLevel) && "APPROVE".equals(recommendation)) {
             rrCode = "HIGH_RISK";
             appStatusCode = "RISK_HOLD";
         }
 
-        RiskRecommendationStatus rrStatus = riskRecommendationStatusRepository
-                .findByStatusCode(rrCode)
-                .orElse(null);
+        RiskRecommendationStatus rrStatus = riskRecommendationStatusRepository.findByStatusCode(rrCode).orElse(null);
+        LoanApplicationStatus appStatus = loanApplicationStatusRepository.findByStatusCode(appStatusCode).orElse(null);
 
-        LoanApplicationStatus appStatus = loanApplicationStatusRepository
-                .findByStatusCode(appStatusCode)
-                .orElse(null);
-
-        if (rrStatus == null || appStatus == null) {
-            return false;
-        }
+        if (rrStatus == null || appStatus == null) return false;
 
         LocalDateTime now = LocalDateTime.now();
-
-        RiskAssessment assessment = riskAssessmentRepository
-                .findByApplication(app)
-                .orElse(new RiskAssessment());
+        RiskAssessment assessment = riskAssessmentRepository.findByApplication(app).orElse(new RiskAssessment());
 
         assessment.setApplication(app);
         assessment.setRiskOfficer(currentOfficer);
@@ -211,26 +206,20 @@ public class RiskOfficerService {
         assessment.setRiskScore(riskScore);
         assessment.setRemarks(notes);
         assessment.setAssessedAt(now);
-
         riskAssessmentRepository.save(assessment);
 
+        // Update the application with verified income and EMIs
         app.setMonthlyIncome(monthlyIncome);
-        app.setExistingEmis(existingEmis);
+        app.setExistingEmis(totalEmis);
         app.setStatus(appStatus);
 
-        // timeline fields update
+        // Timelines
         if ("APPROVE".equals(recommendation)) {
-            if ("HIGH".equals(riskLevel)) {
-                // high risk hold case
-                app.setRiskRecommendedApproveAt(null);
-                app.setRiskRecommendedRejectAt(null);
-            } else {
+            if (!"HIGH".equals(riskLevel)) {
                 app.setRiskRecommendedApproveAt(now);
-                app.setRiskRecommendedRejectAt(null);
             }
         } else if ("REJECT".equals(recommendation)) {
             app.setRiskRecommendedRejectAt(now);
-            app.setRiskRecommendedApproveAt(null);
         } else if ("NEED_MORE_INFO".equals(recommendation)) {
             app.setNeedsInfoAt(now);
             app.setNeedsInfoMessage(notes);
@@ -238,13 +227,8 @@ public class RiskOfficerService {
 
         loanApplicationRepository.save(app);
 
-        String description =
-                "Risk evaluation completed. " +
-                        "Risk Score: " + riskScore +
-                        ", Risk Level: " + riskLevel +
-                        ", Recommendation Code: " + rrCode +
-                        ((notes != null && !notes.isBlank()) ? ", Notes: " + notes : "");
-
+        // Mail Logic
+        String description = "Risk evaluation completed. Score: " + riskScore + ", Level: " + riskLevel;
         sendCustomerMail(app, "Risk evaluation update", description);
 
         return true;
@@ -252,22 +236,14 @@ public class RiskOfficerService {
 
     private void sendCustomerMail(LoanApplication app, String actionTitle, String description) {
         if (app == null || app.getCustomer() == null) return;
-        if (app.getCustomer().getEmail() == null || app.getCustomer().getEmail().isBlank()) return;
-
-        String customerName = app.getCustomer().getName() != null ? app.getCustomer().getName() : "Customer";
-        String applicationNo = app.getApplicationNo() != null
-                ? app.getApplicationNo()
-                : String.valueOf(app.getApplicationId());
-
-        String statusCode = (app.getStatus() != null && app.getStatus().getStatusCode() != null)
-                ? app.getStatus().getStatusCode()
-                : "UNKNOWN";
+        String email = app.getCustomer().getEmail();
+        if (email == null || email.isBlank()) return;
 
         mailService.sendApplicationStatusUpdate(
-                app.getCustomer().getEmail(),
-                customerName,
-                applicationNo,
-                statusCode,
+                email,
+                app.getCustomer().getName(),
+                app.getApplicationNo(),
+                app.getStatus().getStatusCode(),
                 actionTitle,
                 description
         );
@@ -275,15 +251,7 @@ public class RiskOfficerService {
 
     @Transactional(readOnly = true)
     public StaffUsers getCurrentStaffUser() {
-        if (SecurityContextHolder.getContext().getAuthentication() == null) {
-            return null;
-        }
-
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        if (username == null || username.isBlank()) {
-            return null;
-        }
-
         return staffUsersRepository.findByEmail(username).orElse(null);
     }
 }

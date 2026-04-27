@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+        <div class="db-card db-card-pad" style="max-width: 500px; margin: 50px auto; text-align: center;">
+            <div style="font-size: 60px; color: #ef4444; margin-bottom: 20px;">
+                <i class="fa-solid fa-circle-xmark"></i>
+            </div>
+            <h2 style="color: #1e293b;">Application Rejected</h2>
+            <p style="color: #64748b; margin: 15px 0;">We regret to inform you that your loan application cannot proceed at this time.</p>
+
+            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <p style="font-weight: 600; color: #1e293b;">CIBIL Score: <span th:text="${score}" style="color: #ef4444;"></span></p>
+                <p style="font-size: 13px; color: #64748b;" th:text="${reason}"></p>
+            </div>
+
+            <a href="/customer/dashboard" class="db-btn" style="width: 100%;">Back to Dashboard</a>
+        </div>
+</body>
+</html>

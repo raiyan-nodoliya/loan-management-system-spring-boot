@@ -7,12 +7,17 @@ import com.bank.LMS.Repository.LoanApplicationRepository;
 import com.bank.LMS.Repository.LoanApplicationStatusRepository;
 import com.bank.LMS.Repository.LoanDocumentRepository;
 import com.bank.LMS.Service.config.MailService;
+import com.bank.LMS.Service.customer.LoanApplicationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Service handling all Bank Officer operations including
+ * application review, PAN-validated CIBIL fetching, and status transitions.
+ */
 @Service
 public class OfficerReviewService {
 
@@ -20,29 +25,48 @@ public class OfficerReviewService {
     private final LoanDocumentRepository docRepo;
     private final LoanApplicationStatusRepository statusRepo;
     private final MailService mailService;
+    private final LoanApplicationService loanApplicationService;
 
     public OfficerReviewService(LoanApplicationRepository loanRepo,
                                 LoanDocumentRepository docRepo,
                                 LoanApplicationStatusRepository statusRepo,
-                                MailService mailService) {
+                                MailService mailService,
+                                LoanApplicationService loanApplicationService) {
         this.loanRepo = loanRepo;
         this.docRepo = docRepo;
         this.statusRepo = statusRepo;
         this.mailService = mailService;
+        this.loanApplicationService = loanApplicationService;
     }
 
-    public long countSubmitted() {
-        return loanRepo.countByStatus_StatusCode("SUBMITTED");
+    /**
+     * ✅ BUG #4 FIX: PAN Validated CIBIL Fetch
+     * Ensures the officer enters the correct PAN before system triggers score calculation.
+     */
+    @Transactional
+    public void fetchCibilWithPan(Long appId, String inputPan) {
+        LoanApplication app = loanRepo.findById(appId)
+                .orElseThrow(() -> new IllegalArgumentException("Loan Application not found for ID: " + appId));
+
+        String storedPan = app.getCustomer().getPanCard();
+
+        // 1. Check if PAN exists in record
+        if (storedPan == null || storedPan.isBlank()) {
+            throw new IllegalArgumentException("Customer has not provided a PAN card number in their profile.");
+        }
+
+        // 2. Strict validation against input
+        if (!storedPan.equalsIgnoreCase(inputPan.trim())) {
+            throw new IllegalArgumentException("PAN Number Mismatch! Verification failed for bureau fetch.");
+        }
+
+        // 3. Proceed to calculation if matched
+        loanApplicationService.generateCibilScore(appId);
     }
 
-    public long countNeedsInfo() {
-        return loanRepo.countByStatus_StatusCode("NEEDS_INFO");
-    }
-
-    public long countInReview() {
-        return loanRepo.countByStatus_StatusCode("IN_REVIEW");
-    }
-
+    /**
+     * Fetch all applications currently in the Officer's bucket.
+     */
     public List<LoanApplication> queue() {
         return loanRepo.findByStatus_StatusCodeInOrderByApplicationIdDesc(
                 List.of("SUBMITTED", "NEEDS_INFO", "IN_REVIEW")
@@ -53,8 +77,12 @@ public class OfficerReviewService {
         return loanRepo.findById(id).orElse(null);
     }
 
+    /**
+     * ✅ BUG #3 FIX: Full Document History
+     * Returns all versions of documents for transparency.
+     */
     public List<LoanDocument> getDocs(Long appId) {
-        return docRepo.findByApplication_ApplicationIdAndIsLatestTrueOrderByDocumentTypeAsc(appId);
+        return docRepo.findByApplication_ApplicationIdOrderByUploadedAtDesc(appId);
     }
 
     @Transactional
@@ -66,23 +94,15 @@ public class OfficerReviewService {
         if (st == null) return false;
 
         app.setStatus(st);
-
         if (app.getOfficerReviewStartedAt() == null) {
             app.setOfficerReviewStartedAt(LocalDateTime.now());
         }
-
         if (notes != null && !notes.isBlank()) {
             app.setOfficerNotes(notes);
         }
 
         loanRepo.save(app);
-
-        sendCustomerMail(
-                app,
-                "Application put under review",
-                notes != null && !notes.isBlank() ? notes : "Your application is currently under officer review."
-        );
-
+        sendCustomerMail(app, "Review Started", "Your application is now under official review by our loan officer.");
         return true;
     }
 
@@ -98,25 +118,12 @@ public class OfficerReviewService {
         app.setNeedsInfoMessage(message);
         app.setNeedsInfoAt(LocalDateTime.now());
 
-        if (app.getOfficerReviewStartedAt() == null) {
-            app.setOfficerReviewStartedAt(LocalDateTime.now());
-        }
-
         if (notes != null && !notes.isBlank()) {
             app.setOfficerNotes(notes);
         }
 
         loanRepo.save(app);
-
-        StringBuilder desc = new StringBuilder("Requested additional information from customer.");
-        if (message != null && !message.isBlank()) {
-            desc.append(" Message: ").append(message);
-        }
-        if (notes != null && !notes.isBlank()) {
-            desc.append(" Officer Notes: ").append(notes);
-        }
-
-        sendCustomerMail(app, "Additional information required", desc.toString());
+        sendCustomerMail(app, "Action Required", "Information requested: " + message);
         return true;
     }
 
@@ -125,18 +132,12 @@ public class OfficerReviewService {
         LoanApplication app = loanRepo.findById(id).orElse(null);
         if (app == null) return false;
 
-        LoanApplicationStatus riskEvalStatus = statusRepo.findByStatusCode("FORWARDED_TO_RISK").orElse(null);
-        if (riskEvalStatus == null) {
-            riskEvalStatus = statusRepo.findByStatusCode("RISK_EVALUATION").orElse(null);
-        }
-        if (riskEvalStatus == null) return false;
+        LoanApplicationStatus st = statusRepo.findByStatusCode("FORWARDED_TO_RISK")
+                .orElseGet(() -> statusRepo.findByStatusCode("RISK_EVALUATION").orElse(null));
 
-        app.setStatus(riskEvalStatus);
+        if (st == null) return false;
 
-        if (app.getOfficerReviewStartedAt() == null) {
-            app.setOfficerReviewStartedAt(LocalDateTime.now());
-        }
-
+        app.setStatus(st);
         app.setForwardedToRiskAt(LocalDateTime.now());
 
         if (officerNotes != null && !officerNotes.isBlank()) {
@@ -144,35 +145,28 @@ public class OfficerReviewService {
         }
 
         loanRepo.save(app);
-
-        sendCustomerMail(
-                app,
-                "Application forwarded to Risk Officer",
-                officerNotes != null && !officerNotes.isBlank()
-                        ? officerNotes
-                        : "Your application has been forwarded for risk evaluation."
-        );
-
+        sendCustomerMail(app, "Verification Step", "Your application has moved to the Risk Evaluation stage.");
         return true;
     }
 
     private void sendCustomerMail(LoanApplication app, String actionTitle, String description) {
-        if (app == null || app.getCustomer() == null) return;
-        if (app.getCustomer().getEmail() == null || app.getCustomer().getEmail().isBlank()) return;
-
-        String customerName = app.getCustomer().getName() != null ? app.getCustomer().getName() : "Customer";
-        String applicationNo = app.getApplicationNo() != null ? app.getApplicationNo() : String.valueOf(app.getApplicationId());
-        String statusCode = (app.getStatus() != null && app.getStatus().getStatusCode() != null)
-                ? app.getStatus().getStatusCode()
-                : "UNKNOWN";
-
+        if (app == null || app.getCustomer() == null || app.getCustomer().getEmail() == null) return;
         mailService.sendApplicationStatusUpdate(
                 app.getCustomer().getEmail(),
-                customerName,
-                applicationNo,
-                statusCode,
+                app.getCustomer().getName(),
+                app.getApplicationNo(),
+                app.getStatus().getStatusCode(),
                 actionTitle,
                 description
         );
+    }
+
+    // --- Dashboard Counter Methods ---
+    public long countSubmitted() { return loanRepo.countByStatus_StatusCode("SUBMITTED"); }
+    public long countNeedsInfo() { return loanRepo.countByStatus_StatusCode("NEEDS_INFO"); }
+    public long countInReview() { return loanRepo.countByStatus_StatusCode("IN_REVIEW"); }
+
+    public LoanApplicationService getLoanService() {
+        return this.loanApplicationService;
     }
 }
